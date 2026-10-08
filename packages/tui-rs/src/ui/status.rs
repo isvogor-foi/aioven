@@ -15,7 +15,18 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let model = derive::model_name(&app.store, &app.root).unwrap_or_default();
     let model = app.model.as_ref().map(|(_, m)| m.clone()).unwrap_or(model);
     let left = format!(" {} {tier} {model}", app.agent);
-    let hints = " ⇧⏎ send · ctrl+0-9 tabs · ctrl+↑ focus · ctrl+p menu · / skills ";
+    // most important first; drop from the end until the line fits
+    let all = ["⇧⏎ send", "ctrl+p menu", "ctrl+0-9 tabs", "ctrl+g blueprint", "/ skills", "ctrl+↑ focus"];
+    let room_for_hints = (area.width as usize).saturating_sub(left.chars().count() + 4);
+    let mut hints = String::new();
+    for h in all {
+        let next = if hints.is_empty() { format!(" {h} ") } else { format!("{hints}· {h} ") };
+        if next.chars().count() > room_for_hints {
+            break;
+        }
+        hints = next;
+    }
+    let hints = hints.as_str();
     let notice = app.notice.clone().unwrap_or_default();
     let room = (area.width as usize).saturating_sub(left.chars().count() + hints.chars().count() + 3);
     let notice: String = notice.chars().take(room).collect();

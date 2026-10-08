@@ -11,7 +11,7 @@ describe("AIOven.agent", () => {
   test("maps tiers to models and honours per-agent overrides", () => {
     const settings = {
       tiers: { small: "github-copilot/gpt-5-mini", large: "github-copilot/claude-opus-4.5" },
-      agents: { explore: { tier: "large" as const, budget: 9_000 } },
+      agents: { pantry: { tier: "large" as const, budget: 9_000 } },
     }
     expect(AIOven.agent(settings, "pantry")).toEqual({
       tier: "large",
@@ -25,8 +25,9 @@ describe("AIOven.agent", () => {
 })
 
 describe("AIOven.terse", () => {
-  test("full by default, off disables, levels differ", () => {
-    expect(AIOven.terse(undefined)).toContain("terse")
+  test("caveman ultra by default, off disables, levels differ", () => {
+    expect(AIOven.terse(undefined)).toContain("caveman ultra")
+    expect(AIOven.terse({ terse: "full" })).toContain("caveman")
     expect(AIOven.terse({ terse: "off" })).toBeUndefined()
     expect(AIOven.terse({ terse: "lite" })).not.toEqual(AIOven.terse({ terse: "ultra" }))
   })
@@ -39,9 +40,17 @@ describe("AIOven.terse", () => {
 
 describe("AIOvenDefaults.budget", () => {
   test("config override, then agent default, then fallback", () => {
-    expect(AIOvenDefaults.budget({ agents: { build: { budget: 1 } } }, "bake", false)).toBe(1)
+    expect(AIOvenDefaults.budget({ agents: { bake: { budget: 1 } } }, "bake", false)).toBe(1)
     expect(AIOvenDefaults.budget(undefined, "taster", true)).toBe(80_000)
     expect(AIOvenDefaults.budget(undefined, "custom", true)).toBe(50_000)
     expect(AIOvenDefaults.budget(undefined, "custom", false)).toBe(200_000)
+  })
+})
+
+describe("AIOven.cbse", () => {
+  test("bake and recipe get component-first guidance; subagents don't", () => {
+    expect(AIOven.cbse("bake")).toContain("components touched")
+    expect(AIOven.cbse("recipe")).toContain("interfaces")
+    expect(AIOven.cbse("pantry")).toBeUndefined()
   })
 })

@@ -143,6 +143,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
         KeyCode::Char(c) if (alt || ctrl) && digit(c).is_some() => return Some(Action::SelectTab(digit(c)?)),
         KeyCode::Char('b') if ctrl => return Some(Action::Background),
         KeyCode::Char('p') if ctrl => return Some(Action::OpenMenu),
+        KeyCode::Char('g') if ctrl => return Some(Action::Blueprint),
         KeyCode::Up if ctrl => return Some(Action::FocusNext),
         _ => {}
     }
@@ -229,6 +230,7 @@ mod tests {
         assert_eq!(map_key(k(KeyCode::Up, KeyModifiers::CONTROL), &CHAT), Some(Action::FocusNext));
         assert_eq!(map_key(k(KeyCode::Char('b'), KeyModifiers::CONTROL), &CHAT), Some(Action::Background));
         assert_eq!(map_key(k(KeyCode::Char('p'), KeyModifiers::CONTROL), &CHAT), Some(Action::OpenMenu));
+        assert_eq!(map_key(k(KeyCode::Char('g'), KeyModifiers::CONTROL), &CHAT), Some(Action::Blueprint));
         let complete = KeyContext { popup: Popup::Complete, ..CHAT };
         assert_eq!(map_key(k(KeyCode::Tab, KeyModifiers::NONE), &complete), Some(Action::PopupComplete));
         assert!(matches!(map_key(k(KeyCode::Char('d'), KeyModifiers::NONE), &complete), Some(Action::Input(_))));

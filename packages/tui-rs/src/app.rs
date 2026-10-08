@@ -400,7 +400,8 @@ impl App {
                 }
             }
             Action::Blueprint => {
-                self.view = View::Blueprint;
+                // toggle the full-height blueprint (it is always shown above the chat)
+                self.view = if self.view == View::Blueprint { View::Chat } else { View::Blueprint };
                 self.refresh_recipe();
             }
             Action::NextSkill => {

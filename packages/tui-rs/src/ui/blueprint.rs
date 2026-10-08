@@ -29,6 +29,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         (planned.clone(), "from recipe".to_string())
     };
     let (by, other) = plan_model::assign(&components, &diffs);
+    let interfaces = app.recipe.as_deref().map(plan_model::parse_interfaces).unwrap_or_default();
+    let links = app.recipe.as_deref().map(plan_model::parse_communication).unwrap_or_default();
     let mut lines = vec![Line::from(Span::styled(source, Theme::muted())), Line::default()];
     for (i, c) in components.iter().enumerate() {
         if planned.is_empty() && by[i].is_empty() {
@@ -45,6 +47,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
             Span::styled(c.name.clone(), Theme::text().add_modifier(Modifier::BOLD)),
             Span::styled(if c.new { "  new" } else { "  reuse" }, Theme::muted()),
         ]));
+        for (_, sig) in interfaces.iter().filter(|(n, _)| *n == c.name) {
+            lines.push(Line::from(vec![
+                Span::styled("    ◇ ", Style::default().fg(Theme::BLUE)),
+                Span::styled(sig.clone(), Style::default().fg(Theme::CODE)),
+            ]));
+        }
         if by[i].is_empty() {
             lines.push(Line::from(Span::styled(format!("    {}", if c.paths.is_empty() { "no files yet".into() } else { c.paths.join(", ") }), Style::default().fg(Theme::DIM))));
         }
@@ -53,6 +61,18 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                 Span::styled(format!("    {}", d.file.clone().unwrap_or_default()), Theme::text()),
                 Span::styled(format!(" +{}", d.additions), Style::default().fg(Theme::GREEN)),
                 Span::styled(format!(" −{}", d.deletions), Style::default().fg(Theme::RED)),
+            ]));
+        }
+    }
+    if !links.is_empty() {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled("COMMUNICATION", Theme::muted().add_modifier(Modifier::BOLD))));
+        for (from, to, what) in &links {
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {from} "), Theme::text()),
+                Span::styled("→ ", Style::default().fg(Theme::AQUA)),
+                Span::styled(format!("{to}  "), Theme::text()),
+                Span::styled(what.clone(), Theme::muted()),
             ]));
         }
     }
@@ -72,7 +92,15 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     }
     let (done, total) = progress(app);
     let title = if total > 0 { format!("BLUEPRINT {done}/{total}") } else { "BLUEPRINT".into() };
-    f.render_widget(Paragraph::new(lines).block(panel(&title)).wrap(Wrap { trim: false }), area);
+    let focused = app.focus == crate::keys::Focus::Files;
+    let max_scroll = (lines.len() as u16).saturating_sub(area.height.saturating_sub(2));
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(super::panel_focus(&title, focused))
+            .wrap(Wrap { trim: false })
+            .scroll((app.files_scroll.min(max_scroll), 0)),
+        area,
+    );
 }
 
 pub fn render_skill(f: &mut Frame, area: Rect, app: &App, name: &str) {

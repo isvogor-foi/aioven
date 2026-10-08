@@ -9,7 +9,7 @@ Run it with `aioven [project-path]` (or `bun dev` inside this repo).
 `aioven` starts the Ratatui client (`packages/tui-rs`). `AIOVEN_TUI=old aioven` starts the previous OpenTUI interface.
 
 - **Top bar:** one tab per agent (`0` = main, `1`–`9` = subagents) with live status, then the skills used in the session, then `B blueprint`.
-- **Middle:** changed files on top (with their recipe component), chat of the selected tab below. Tool calls show as one line each.
+- **Middle:** the blueprint on top (recipe components, their interfaces, changed files, communication), chat of the selected tab below. Tool calls show as one line each.
 - **Sidebar:** tokens burned per agent against its budget, total and cache hit, running tasks, recipe progress and ETA.
 - **Bottom:** the input box (shows the current main agent) and a status line.
 
@@ -22,10 +22,10 @@ Run it with `aioven [project-path]` (or `bun dev` inside this repo).
 | Ctrl+0–9 (or Alt+0–9) | open tab N; never types into the input |
 | `/` or `\` at line start | skills (✦) and commands; ↑↓ choose, Tab complete, Enter run, Esc close |
 | Ctrl+P | menu: model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
-| Ctrl+B | move running foreground subagents to the background |
-| Ctrl+↑ | focus chat, then files (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
-| Mouse wheel | scroll chat or files under the pointer |
-| Alt+B | blueprint tab (Esc returns) |
+| Ctrl+B | move running foreground subagents to the background (inside tmux press Ctrl+B twice, or use the Ctrl+P menu) |
+| Ctrl+↑ | focus chat, then blueprint (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
+| Mouse wheel | scroll chat or blueprint under the pointer |
+| Ctrl+G (or Alt+B) | full-height blueprint (Esc returns); tmux uses Ctrl+B as its prefix |
 | Alt+S | next skill tab |
 | Esc | stop the agent you're viewing (asks y/n); on an idle subagent tab, back to main |
 | Ctrl+X | stop all busy agents (asks y/n) |
@@ -59,6 +59,9 @@ If your terminal can't tell Shift+Enter apart from Enter, use Alt+Enter to send.
 | cookbook | subagent | small | looks up docs and issues on the web |
 
 ## Built-in behaviour
+
+- **Caveman ultra** is the default writing style for every agent, helpers included. Set `aioven.terse` to `full`, `lite` or `off` to change it.
+- **Components first:** bake names the components, interfaces and communication before editing, and writes a short design when there is no recipe. Taster checks code against the recipe's interfaces first; those findings are marked `[interface]`.
 
 - **Recipe mode** (planning) is on by default. Recipes must define components, interfaces and communication before any implementation steps. When you approve a recipe ("recipe ready"), it switches to bake, which turns the steps into todos.
 - **Todo nudge:** if bake stops while todos are still open, it gets one short "continue" prompt. It gets at most 2 nudges without progress.

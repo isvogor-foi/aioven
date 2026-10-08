@@ -3,7 +3,6 @@
 mod blueprint;
 mod chat;
 mod dialogs;
-mod files;
 mod popups;
 mod sidebar;
 mod status;
@@ -75,11 +74,12 @@ pub fn render(f: &mut Frame, app: &mut App) {
         View::Chat => {
             let middle = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(body[0]);
+            // T16d: the blueprint (components, interfaces, files) is the main view; chat below
             app.files_area = middle[0];
             app.chat_area = middle[1];
-            files::render(f, middle[0], app);
+            blueprint::render(f, middle[0], app);
             chat::render(f, middle[1], app);
         }
         View::Blueprint => blueprint::render(f, body[0], app),

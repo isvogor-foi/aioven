@@ -33,6 +33,45 @@ pub fn parse_plan(markdown: &str) -> Vec<Component> {
         .collect()
 }
 
+/// Lines of the first `##`–`####` section whose heading contains `word`.
+fn section<'a>(markdown: &'a str, word: &str) -> Vec<&'a str> {
+    let lines: Vec<&str> = markdown.lines().collect();
+    let heading = |l: &str| l.starts_with('#') && l.trim_start_matches('#').starts_with(' ');
+    let level = |l: &str| l.chars().take_while(|c| *c == '#').count();
+    let Some(start) = lines.iter().position(|l| heading(l) && (2..=4).contains(&level(l)) && l.to_lowercase().contains(word)) else {
+        return vec![];
+    };
+    let lvl = level(lines[start]);
+    lines[start + 1..].iter().copied().take_while(|l| !(heading(l) && level(l) <= lvl)).collect()
+}
+
+/// `- **Component**: `signature`` bullets of the `### Interfaces` section → (component, signature).
+pub fn parse_interfaces(markdown: &str) -> Vec<(String, String)> {
+    section(markdown, "interfaces")
+        .into_iter()
+        .filter_map(|l| {
+            let rest = l.trim_start().strip_prefix("- ").or_else(|| l.trim_start().strip_prefix("* "))?;
+            let rest = rest.strip_prefix("**")?;
+            let (name, rest) = rest.split_once("**")?;
+            let sig = rest.trim_start().strip_prefix(':')?.trim().trim_matches('`').trim();
+            (!sig.is_empty()).then(|| (name.trim().to_string(), sig.to_string()))
+        })
+        .collect()
+}
+
+/// `- From → To: what (kind)` bullets of the `### Communication` section → (from, to, what).
+pub fn parse_communication(markdown: &str) -> Vec<(String, String, String)> {
+    section(markdown, "communication")
+        .into_iter()
+        .filter_map(|l| {
+            let rest = l.trim_start().strip_prefix("- ").or_else(|| l.trim_start().strip_prefix("* "))?;
+            let (from, rest) = rest.split_once('→').or_else(|| rest.split_once("->"))?;
+            let (to, what) = rest.split_once(':')?;
+            Some((from.trim().trim_matches('*').to_string(), to.trim().trim_matches('*').to_string(), what.trim().to_string()))
+        })
+        .collect()
+}
+
 fn parse_bullet(line: &str) -> Option<Component> {
     let rest = line.trim_start().strip_prefix("- ").or_else(|| line.trim_start().strip_prefix("* "))?;
     let rest = rest.strip_prefix("**")?;
@@ -140,6 +179,16 @@ mod tests {
         assert_eq!(by[1][0].file.as_deref(), Some("src/http/agent.ts"));
         assert!(by[2].is_empty());
         assert_eq!(other.len(), 2);
+    }
+
+    #[test]
+    fn interfaces_and_communication() {
+        let md = "## Architecture\n### Components\n- **A** (new) — paths: a.rs — x\n### Interfaces\n- **A**: `fn run(x: u8) -> Result<()>`\n- **A**: `event Done`\n- not one\n### Communication\n- A → B: run request (async)\n- **B** -> C: result (event)\n## Steps\n- **A**: `ignored`\n";
+        assert_eq!(parse_interfaces(md), [("A".to_string(), "fn run(x: u8) -> Result<()>".to_string()), ("A".to_string(), "event Done".to_string())]);
+        assert_eq!(parse_communication(md), [
+            ("A".to_string(), "B".to_string(), "run request (async)".to_string()),
+            ("B".to_string(), "C".to_string(), "result (event)".to_string()),
+        ]);
     }
 
     #[test]

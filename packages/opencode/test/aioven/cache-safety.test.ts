@@ -27,6 +27,6 @@ describe("cache safety", () => {
 
   test("terse style is the first per-request system part", async () => {
     const text = await Bun.file(path.join(root, "session/prompt.ts")).text()
-    expect(text).toMatch(/const system = \[\s*\.\.\.\(terse \? \[terse\] : \[\]\),\s*\.\.\.env,/)
+    expect(text).toMatch(/const system = \[\s*\.\.\.\(terse \? \[terse\] : \[\]\),\s*\.\.\.\(cbse \? \[cbse\] : \[\]\),\s*\.\.\.env,/)
   })
 })
