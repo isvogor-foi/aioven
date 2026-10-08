@@ -5,6 +5,7 @@
 // detects dark/light mode, builds a small system theme locally, and maps it to
 // the run footer + scrollback color model. Falls back to a hardcoded dark-mode
 // palette if detection fails.
+import { Brand, type RGB } from "@opencode-ai/tui/brand"
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import type { EntryKind } from "./types"
@@ -268,11 +269,6 @@ function paletteColor(colors: TerminalColors, index: number): RGBA {
   return value ? RGBA.fromHex(value) : ansiToRgba(index)
 }
 
-function splashShadow(indexed: RGBA[], base: RGBA, overlay: RGBA, value: number): RGBA {
-  const mixed = tint(base, overlay, value)
-  return nearestIndexed(indexed, mixed)
-}
-
 export function resolveTheme(theme: ThemeJson, pick: "dark" | "light"): TuiThemeCurrent {
   const defs = theme.defs ?? {}
 
@@ -486,15 +482,17 @@ function quantizeTheme(theme: TuiThemeCurrent, indexed: RGBA[]): TuiThemeCurrent
   }
 }
 
-function splashTheme(theme: TuiThemeCurrent, indexed: RGBA[]): RunSplashTheme {
-  const left = nearestIndexed(indexed, theme.textMuted)
-  const right = nearestIndexed(indexed, theme.text)
-  return {
-    left,
-    right,
-    leftShadow: splashShadow(indexed, theme.background, left, 0.14),
-    rightShadow: splashShadow(indexed, theme.background, right, 0.14),
-  }
+// AIOven: splash colours are the forced Brand blues, not theme-derived.
+function splashTheme(_theme: TuiThemeCurrent, _indexed: RGBA[]): RunSplashTheme {
+  return brandSplash
+}
+
+const brandRGBA = (c: RGB) => RGBA.fromInts(c[0], c[1], c[2])
+const brandSplash: RunSplashTheme = {
+  left: brandRGBA(Brand.colors.left),
+  right: brandRGBA(Brand.colors.right),
+  leftShadow: brandRGBA(Brand.colors.leftShadow),
+  rightShadow: brandRGBA(Brand.colors.rightShadow),
 }
 
 function map(
@@ -598,9 +596,6 @@ function tone(body: ColorInput, start?: ColorInput): Tone {
   }
 }
 
-const fallbackSplashIndexed = Array.from({ length: 256 }, (_, index) => RGBA.fromIndex(index))
-const fallbackSplashLeft = RGBA.fromIndex(67)
-const fallbackSplashRight = RGBA.fromIndex(110)
 
 export const RUN_THEME_FALLBACK: RunTheme = {
   background: RGBA.fromValues(0, 0, 0, 0),
@@ -629,12 +624,7 @@ export const RUN_THEME_FALLBACK: RunTheme = {
     tool: tone(seed.text, seed.muted),
     error: tone(seed.error),
   },
-  splash: {
-    left: fallbackSplashLeft,
-    right: fallbackSplashRight,
-    leftShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashLeft, 0.14),
-    rightShadow: splashShadow(fallbackSplashIndexed, RGBA.fromValues(0, 0, 0, 0), fallbackSplashRight, 0.14),
-  },
+  splash: brandSplash,
   block: {
     highlight: seed.highlight,
     warning: seed.warning,

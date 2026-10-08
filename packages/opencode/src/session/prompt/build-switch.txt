@@ -1,5 +1,6 @@
 <system-reminder>
-Your operational mode has changed from plan to build.
+Your operational mode has changed from recipe to bake.
 You are no longer in read-only mode.
 You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
+If a recipe (plan) was approved, first turn its steps into a todo list with todowrite, then work through it, marking each todo completed as you go. Implement the interfaces exactly as the plan's Architecture section defines them; if one must change, say so before changing it.
 </system-reminder>

@@ -1,0 +1,8 @@
+Structural code search and rewrite with ast-grep. Matches syntax, not text: `$X` matches one node, `$$$ARGS` matches many.
+
+Examples:
+- pattern `console.log($$$)` lang `ts` → all console.log calls
+- pattern `useEffect($FN, [])` lang `tsx` → effects with empty deps
+- pattern `foo($A)` rewrite `bar($A)` → preview the rename; set apply=true to write it
+
+Use it instead of grep when the shape of the code matters. Output: `path:line: code` per match (max 100). With rewrite: `path:line: old → new` preview; apply=true writes all rewrites and needs edit permission.

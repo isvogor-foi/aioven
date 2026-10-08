@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Brand } from "@opencode-ai/tui/brand"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
 import { RUN_THEME_FALLBACK, generateSystem, resolveRunTheme, resolveTheme } from "@/cli/cmd/run/theme"
 
@@ -62,7 +63,7 @@ test("falls back when palette lookup fails", async () => {
   expect(await resolveRunTheme(renderer({ fail: true }))).toBe(RUN_THEME_FALLBACK)
 })
 
-test("returns syntax styles and indexed splash colors", async () => {
+test("returns syntax styles and AIOven brand splash colors", async () => {
   const theme = await resolveRunTheme(renderer({ themeMode: "dark" }))
 
   try {
@@ -70,10 +71,11 @@ test("returns syntax styles and indexed splash colors", async () => {
     expect(theme.block.subtleSyntax).toBeDefined()
     expect([...theme.block.syntax!.getAllStyles()].length).toBeGreaterThan(0)
     expect([...theme.block.subtleSyntax!.getAllStyles()].length).toBeGreaterThan(0)
-    expectIndexed(theme.splash.left)
-    expectIndexed(theme.splash.right)
-    expectIndexed(theme.splash.leftShadow)
-    expectIndexed(theme.splash.rightShadow)
+    // AIOven: splash colours are the fixed Brand blues, not palette-indexed
+    expect(RGBA.fromHex(String(theme.splash.left instanceof RGBA ? theme.splash.left.toHex() : theme.splash.left)).toInts().slice(0, 3)).toEqual([...Brand.colors.left])
+    expect(RGBA.fromHex(String(theme.splash.right instanceof RGBA ? theme.splash.right.toHex() : theme.splash.right)).toInts().slice(0, 3)).toEqual([...Brand.colors.right])
+    expect(RGBA.fromHex(String(theme.splash.leftShadow instanceof RGBA ? theme.splash.leftShadow.toHex() : theme.splash.leftShadow)).toInts().slice(0, 3)).toEqual([...Brand.colors.leftShadow])
+    expect(RGBA.fromHex(String(theme.splash.rightShadow instanceof RGBA ? theme.splash.rightShadow.toHex() : theme.splash.rightShadow)).toInts().slice(0, 3)).toEqual([...Brand.colors.rightShadow])
     expectIndexed(theme.block.highlight)
     expectIndexed(theme.block.warning)
     expectRgba(theme.footer.highlight)

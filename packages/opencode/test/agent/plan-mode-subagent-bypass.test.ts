@@ -28,11 +28,11 @@ function testAgent(input: {
 
 it.instance("subagent permissions take precedence over parent agent restrictions", () =>
   Effect.gen(function* () {
-    const planAgent = yield* Agent.use.get("plan")
-    const generalAgent = yield* Agent.use.get("general")
+    const planAgent = yield* Agent.use.get("recipe")
+    // AIOven ships no editing subagent, so use a custom one that may edit.
+    const generalAgent = testAgent({ name: "writer", mode: "subagent", permission: { "*": "allow" } })
 
     expect(planAgent).toBeDefined()
-    expect(generalAgent).toBeDefined()
     // Sanity: the plan agent itself blocks edit. (Note: `write` and
     // `apply_patch` route through the `edit` permission at the runtime
     // tool layer — see Permission.disabled / EDIT_TOOLS.)
@@ -42,12 +42,12 @@ it.instance("subagent permissions take precedence over parent agent restrictions
 
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
-      subagent: generalAgent!,
+      subagent: generalAgent,
     })
 
     // Mirror the runtime evaluation in session/prompt.ts (~line 410, 639):
     //   ruleset: Permission.merge(agent.permission, session.permission ?? [])
-    const effective = Permission.merge(generalAgent!.permission, subagentSessionPermission)
+    const effective = Permission.merge(generalAgent.permission, subagentSessionPermission)
 
     expect(Permission.evaluate("edit", "/some/file.ts", effective).action).not.toBe("deny")
     expect(Permission.disabled(["edit", "write", "apply_patch"], effective)).toEqual(new Set())
@@ -56,7 +56,7 @@ it.instance("subagent permissions take precedence over parent agent restrictions
 
 it.instance("subagent's own read-only restriction remains effective", () =>
   Effect.gen(function* () {
-    const explore = yield* Agent.use.get("explore")
+    const explore = yield* Agent.use.get("pantry")
     expect(explore).toBeDefined()
 
     const parentSessionPermission: PermissionV1.Ruleset = []
@@ -74,7 +74,7 @@ it.instance(
   "custom subagent can explicitly enable edits denied to its parent agent",
   () =>
     Effect.gen(function* () {
-      const planAgent = yield* Agent.use.get("plan")
+      const planAgent = yield* Agent.use.get("recipe")
       const my = yield* Agent.use.get("my_subagent")
       expect(planAgent).toBeDefined()
       expect(my).toBeDefined()

@@ -1,4 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AIOven } from "@/aioven"
+import { TodoNudge } from "@/aioven/todo-nudge"
+import { Todo } from "./todo"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -132,6 +135,7 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
+    const todo = yield* Todo.Service
     const state = yield* SessionRunState.Service
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
@@ -1083,6 +1087,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let nudgeState = TodoNudge.initial
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1124,6 +1129,34 @@ const layer = Layer.effect(
                 tool: orphan.tool,
                 callID: orphan.callID,
               })
+            }
+            const nudge = TodoNudge.decide({
+              agent: lastUser.agent,
+              isSubagent: !!session.parentID,
+              error: !!lastAssistant.error,
+              todos: yield* todo.get(sessionID),
+              state: nudgeState,
+            })
+            if (nudge) {
+              nudgeState = nudge.state
+              const nudgeMsg: SessionV1.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(nudgeMsg)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: nudgeMsg.id,
+                sessionID,
+                type: "text",
+                text: nudge.text,
+                synthetic: true,
+              } satisfies SessionV1.TextPart)
+              continue
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
@@ -1261,7 +1294,11 @@ const layer = Layer.effect(
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const terse = AIOven.terse((yield* config.get()).aioven)
+            const cbse = AIOven.cbse(agent.name)
             const system = [
+              ...(terse ? [terse] : []),
+              ...(cbse ? [cbse] : []),
               ...env,
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
@@ -1617,6 +1654,7 @@ export const node = LayerNode.make({
     Image.node,
     CrossSpawnSpawner.node,
     Instruction.node,
+    Todo.node,
     SessionRunState.node,
     SessionRevert.node,
     SessionSummary.node,

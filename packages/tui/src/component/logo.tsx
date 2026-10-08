@@ -1,13 +1,12 @@
 import { RGBA, TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
-import { tint, useTheme } from "../context/theme"
-import { logo } from "../logo"
+import { Brand, type RGB } from "../brand"
 
+const rgba = (c: RGB) => RGBA.fromInts(c[0], c[1], c[2])
+
+// Home-screen logo in forced blue shades (Brand), independent of the theme.
 export function Logo() {
-  const { theme } = useTheme()
-
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background, fg, 0.25)
+  const renderLine = (line: string, fg: RGBA, shadow: RGBA, bold: boolean): JSX.Element[] => {
     const attrs = bold ? TextAttributes.BOLD : undefined
     return Array.from(line).map((char) => {
       if (char === "_") {
@@ -48,11 +47,15 @@ export function Logo() {
 
   return (
     <box>
-      <For each={logo.left}>
+      <For each={Brand.glyphs.left}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
+            <box flexDirection="row">
+              {renderLine(line, rgba(Brand.colors.left), rgba(Brand.colors.leftShadow), false)}
+            </box>
+            <box flexDirection="row">
+              {renderLine(Brand.glyphs.right[index()], rgba(Brand.colors.right), rgba(Brand.colors.rightShadow), true)}
+            </box>
           </box>
         )}
       </For>

@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# AIOven launcher: runs this checkout's CLI in the caller's working directory.
+# The interactive TUI (no subcommand / -s / --attach / project dir) is the Ratatui client;
+# AIOVEN_TUI=old starts the previous OpenTUI interface instead.
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+RS="$REPO/packages/tui-rs/target/release/aioven-tui"
+if [ "$AIOVEN_TUI" != "old" ] && [ -x "$RS" ]; then
+  case "$1" in
+    ""|-s|--session|--attach) exec "$RS" "$@" ;;
+    -*) ;;
+    *) [ -d "$1" ] && exec "$RS" "$@" ;;
+  esac
+fi
+exec bun run "$REPO/packages/opencode/src/index.ts" "$@"

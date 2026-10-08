@@ -57,6 +57,12 @@ const replacements = [
 ] as const
 
 const it = testEffect(LayerNode.compile(root, replacements))
+const foregroundOnly = testEffect(
+  LayerNode.compile(root, [
+    [Config.node, configLayer],
+    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalBackgroundSubagents: false })],
+  ]),
+)
 const withCodeMode = testEffect(
   LayerNode.compile(root, [
     [Config.node, configLayer],
@@ -150,11 +156,11 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("hides task background parameter unless experimental background subagents are enabled", () =>
+  foregroundOnly.instance("hides task background parameter unless experimental background subagents are enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const agent = yield* Agent.Service
-      const build = yield* agent.get("build")
+      const build = yield* agent.get("bake")
       if (!build) throw new Error("build agent not found")
       const task = (yield* registry.tools({
         providerID: ProviderV2.ID.opencode,

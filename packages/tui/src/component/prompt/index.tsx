@@ -45,6 +45,7 @@ import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogConfirm } from "../../ui/dialog-confirm"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -88,6 +89,8 @@ function pastedFilepath(value: string, platform: string) {
 
 export type PromptRef = {
   focused: boolean
+  /** Live textarea content is empty (synchronous, unlike `current.input`). */
+  readonly empty?: boolean
   current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
@@ -164,8 +167,6 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
-  const agentShortcut = useCommandShortcut("agent.cycle")
-  const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
@@ -404,20 +405,11 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
-              sessionID: props.sessionID,
-            })
-            setStore("interrupt", 0)
-          }
-          dialog.clear()
+          const sessionID = props.sessionID
+          // AIOven: one Esc asks for confirmation instead of a double press.
+          void DialogConfirm.show(dialog, "Interrupt", "Stop main agent? (y/n)").then((ok) => {
+            if (ok) void sdk.client.session.abort({ sessionID })
+          })
         },
       },
       {
@@ -582,6 +574,9 @@ export function Prompt(props: PromptProps) {
   const ref: PromptRef = {
     get focused() {
       return input.focused
+    },
+    get empty() {
+      return input.plainText.length === 0
     },
     get current() {
       return store.prompt
@@ -1584,11 +1579,8 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
+                <text fg={theme.text}>
+                  esc <span style={{ fg: theme.textMuted }}>stop</span>
                 </text>
               </box>
             </Match>
@@ -1660,25 +1652,6 @@ export function Prompt(props: PromptProps) {
                 )}
               </Show>
               <Switch>
-                <Match when={store.mode === "normal"}>
-                  <Switch>
-                    <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
-                        </text>
-                      )}
-                    </Match>
-                    <Match when={true}>
-                      <text fg={theme.text}>
-                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
-                      </text>
-                    </Match>
-                  </Switch>
-                  <text fg={theme.text}>
-                    {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
                     esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>

@@ -16,3 +16,7 @@ Guidelines:
 - Do not create any files, or run bash commands that modify the user's system state in any way
 
 Complete the user's search request efficiently and report your findings clearly.
+
+Report format (max ~300 words, no preamble):
+files: one line per relevant file, `path:line — why it matters`
+found: the answer to the question, bare facts

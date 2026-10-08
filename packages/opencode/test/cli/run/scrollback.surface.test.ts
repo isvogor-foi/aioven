@@ -115,11 +115,11 @@ test("turn summary starts at the left edge", async () => {
   const out = await setup()
 
   try {
-    await out.scrollback.writeTurnSummary({ agent: "Build", model: "Little Frank", duration: "2.2s" })
+    await out.scrollback.writeTurnSummary({ agent: "Bake", model: "Little Frank", duration: "2.2s" })
 
     const commits = claim(out.renderer)
     try {
-      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ Build · Little Frank · 2.2s")
+      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ Bake · Little Frank · 2.2s")
     } finally {
       destroy(commits)
     }
@@ -929,7 +929,7 @@ test("does not emit blank patch snapshots between edit and task", async () => {
           status: "completed",
           input: {
             description: "Scan run/* for reducer touchpoints",
-            subagent_type: "explore",
+            subagent_type: "pantry",
           },
           output: "",
           title: "task",
@@ -945,8 +945,8 @@ test("does not emit blank patch snapshots between edit and task", async () => {
     const output = lines.join("\n")
     expect(output).toContain("+ Created README-demo.md")
     expect(output).not.toContain("~ Patched src/demo-format.ts")
-    expect(output).toContain("+ Created README-demo.md\n\n# Explore Task")
-    expect(output).not.toContain("+ Created README-demo.md\n\n\n# Explore Task")
+    expect(output).toContain("+ Created README-demo.md\n\n# Pantry Task")
+    expect(output).not.toContain("+ Created README-demo.md\n\n\n# Pantry Task")
   } finally {
     out.scrollback.destroy()
   }
@@ -1055,8 +1055,8 @@ test("renders promoted task markdown without a leading blank row", async () => {
         state: {
           status: "completed",
           input: {
-            description: "Explore run.ts",
-            subagent_type: "explore",
+            description: "Pantry run.ts",
+            subagent_type: "pantry",
           },
           output: [
             '<task id="child-1" state="completed">',

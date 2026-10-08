@@ -9,7 +9,7 @@ import { rm } from "fs/promises"
 import path from "path"
 import { testEffect } from "../lib/effect"
 
-let CLOUDFLARE_SKILLS_URL: string
+let SAMPLE_SKILLS_URL: string
 let server: ReturnType<typeof Bun.serve>
 let downloadCount = 0
 let mutableVersion = "1"
@@ -55,7 +55,7 @@ beforeAll(async () => {
     },
   })
 
-  CLOUDFLARE_SKILLS_URL = `http://localhost:${server.port}/.well-known/skills/`
+  SAMPLE_SKILLS_URL = `http://localhost:${server.port}/.well-known/skills/`
 })
 
 afterAll(async () => {
@@ -64,11 +64,11 @@ afterAll(async () => {
 })
 
 describe("Discovery.pull", () => {
-  it.live("downloads skills from cloudflare url", () =>
+  it.live("downloads skills from a well-known url", () =>
     Effect.gen(function* () {
       const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
-      const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
+      const dirs = yield* discovery.pull(SAMPLE_SKILLS_URL)
       expect(dirs.length).toBeGreaterThan(0)
       for (const dir of dirs) {
         expect(dir).toStartWith(cacheDir)
@@ -82,7 +82,7 @@ describe("Discovery.pull", () => {
     Effect.gen(function* () {
       const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
-      const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
+      const dirs = yield* discovery.pull(SAMPLE_SKILLS_URL.replace(/\/$/, ""))
       expect(dirs.length).toBeGreaterThan(0)
       for (const dir of dirs) {
         const md = path.join(dir, "SKILL.md")
@@ -112,14 +112,14 @@ describe("Discovery.pull", () => {
     Effect.gen(function* () {
       const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
-      const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
-      // find a skill dir that should have reference files (e.g. agents-sdk)
-      const agentsSdk = dirs.find((d) => d.endsWith(path.sep + "agents-sdk"))
-      expect(agentsSdk).toBeDefined()
-      if (agentsSdk) {
-        const refs = path.join(agentsSdk, "references")
-        expect(yield* fsys.existsSafe(path.join(agentsSdk, "SKILL.md"))).toBe(true)
-        // agents-sdk has reference files per the index
+      const dirs = yield* discovery.pull(SAMPLE_SKILLS_URL)
+      // find a skill dir that should have reference files (sample-a)
+      const withRefs = dirs.find((d) => d.endsWith(path.sep + "sample-a"))
+      expect(withRefs).toBeDefined()
+      if (withRefs) {
+        const refs = path.join(withRefs, "references")
+        expect(yield* fsys.existsSafe(path.join(withRefs, "SKILL.md"))).toBe(true)
+        // sample-a has reference files per the index
         const refDir = yield* Effect.promise(() =>
           Array.fromAsync(new Bun.Glob("**/*.md").scan({ cwd: refs, onlyFiles: true })),
         )
@@ -136,13 +136,13 @@ describe("Discovery.pull", () => {
       const discovery = yield* Discovery.Service
 
       // first pull to populate cache
-      const first = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
+      const first = yield* discovery.pull(SAMPLE_SKILLS_URL)
       expect(first.length).toBeGreaterThan(0)
       const firstCount = downloadCount
       expect(firstCount).toBeGreaterThan(0)
 
       // second pull should return same results from cache
-      const second = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
+      const second = yield* discovery.pull(SAMPLE_SKILLS_URL)
       expect(second.length).toBe(first.length)
       expect(second.sort()).toEqual(first.sort())
 

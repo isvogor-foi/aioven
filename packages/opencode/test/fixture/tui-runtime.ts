@@ -22,9 +22,9 @@ export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = 
   return resolve({ keybinds: input }, { terminalSuspend: process.platform !== "win32" }).keybinds
 }
 
-export function createTuiResolvedConfig(input: ResolvedInput = {}): HostResolved {
+export function createTuiResolvedConfig(input: ResolvedInput = {}, options: { aioven?: boolean } = {}): HostResolved {
   return {
-    ...resolve(input, { terminalSuspend: process.platform !== "win32" }),
+    ...resolve(input, { terminalSuspend: process.platform !== "win32", ...options }),
     plugin_origins: input.plugin_origins,
   }
 }

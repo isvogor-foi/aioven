@@ -12,6 +12,10 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_RESEARCH from "./prompt/research.txt"
+import PROMPT_REVIEW from "./prompt/review.txt"
+import PROMPT_TEST_RUNNER from "./prompt/test-runner.txt"
+import { AIOven } from "@/aioven"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -138,8 +142,8 @@ const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
-          build: {
-            name: "build",
+          bake: {
+            name: "bake",
             description: "The default agent. Executes tools based on configured permissions.",
             options: {},
             permission: Permission.merge(
@@ -153,8 +157,8 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
-          plan: {
-            name: "plan",
+          recipe: {
+            name: "recipe",
             description: "Plan mode. Disallows all edit tools.",
             options: {},
             permission: Permission.merge(
@@ -179,22 +183,81 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
-          general: {
-            name: "general",
-            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+          // AIOven: only build edits code; subagents are read-only helpers.
+          taster: {
+            name: "taster",
+            description: `Read-only code reviewer. Use after making changes to check the diff for bugs, missed requirements and edge cases. Returns numbered issues with file:line, or LGTM.`,
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
-                todowrite: "deny",
+                "*": "deny",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                lsp: "allow",
+                ast_grep: "allow",
+                bash: {
+                  "*": "deny",
+                  "git diff*": "allow",
+                  "git log*": "allow",
+                  "git show*": "allow",
+                  "git status*": "allow",
+                },
+                external_directory: readonlyExternalDirectory,
               }),
               user,
             ),
+            prompt: PROMPT_REVIEW,
             options: {},
             mode: "subagent",
             native: true,
           },
-          explore: {
-            name: "explore",
+          thermometer: {
+            name: "thermometer",
+            description: `Runs builds, type checks, linters and tests and returns only pass/fail plus compact failures. Use it instead of running long test commands yourself to keep your context small.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                bash: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
+            prompt: PROMPT_TEST_RUNNER,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          cookbook: {
+            name: "cookbook",
+            description: `Researches external information: library/API docs, GitHub issues, changelogs, error messages. Returns a short answer with source URLs.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                read: "allow",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                webfetch: "allow",
+                websearch: "allow",
+                external_directory: readonlyExternalDirectory,
+              }),
+              user,
+            ),
+            prompt: PROMPT_RESEARCH,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          pantry: {
+            name: "pantry",
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
@@ -206,6 +269,8 @@ const layer = Layer.effect(
                 webfetch: "allow",
                 websearch: "allow",
                 read: "allow",
+                lsp: "allow",
+                ast_grep: "allow",
                 external_directory: readonlyExternalDirectory,
               }),
               user,
@@ -264,6 +329,22 @@ const layer = Layer.effect(
           },
         }
 
+        // T15: hidden helpers don't run through the session loop's system parts; give them caveman too.
+        const helperTerse = AIOven.terse(cfg.aioven)
+        if (helperTerse) {
+          for (const key of ["compaction", "title", "summary"]) {
+            const item = agents[key]
+            if (item?.prompt) item.prompt = `${item.prompt}\n\n${helperTerse}`
+          }
+        }
+
+        for (const [key, item] of Object.entries(agents)) {
+          const tier = AIOven.agent(cfg.aioven, key)
+          if (!tier) continue
+          if (tier.model) item.model = Provider.parseModel(tier.model)
+          item.variant ??= tier.variant
+        }
+
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
           if (value.disable) {
             delete agents[key]
@@ -319,7 +400,7 @@ const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "bake"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )

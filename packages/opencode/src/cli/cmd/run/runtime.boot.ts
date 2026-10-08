@@ -68,7 +68,7 @@ function emptySessionInfo(): SessionInfo {
 
 function defaultRunTuiConfig(): RunTuiConfig {
   return {
-    ...resolve({}, { terminalSuspend: process.platform !== "win32" }),
+    ...resolve({}, { terminalSuspend: process.platform !== "win32", aioven: false }),
     diff_style: "auto",
   }
 }
@@ -79,7 +79,11 @@ function runTuiConfig(config: Config | undefined): RunTuiConfig {
   }
 
   return {
-    keybinds: config.keybinds,
+    // Run mode keeps upstream keys (Enter sends, Esc interrupts): rebuild without AIOven keys.
+    keybinds: resolve(
+      { keybinds: config.keybind_overrides },
+      { terminalSuspend: process.platform !== "win32", aioven: false },
+    ).keybinds,
     leader_timeout: config.leader_timeout,
     diff_style: config.diff_style ?? "auto",
   }

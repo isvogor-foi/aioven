@@ -53,6 +53,12 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { useAgentSwitch } from "./ui2/switch"
+import { AgentTabs } from "./ui2/tabs"
+import { ArchitectureView, useArchitecture } from "./ui2/architecture"
+import { StatusBar } from "./ui2/status-bar"
+import { View } from "./ui2/view"
+import { compact as compactTool } from "./ui2/compact"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -128,6 +134,7 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
+  "session.toggle.compact",
   "session.first",
   "session.last",
   "session.messages_last_user",
@@ -162,6 +169,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  compact: () => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -193,6 +201,8 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  useAgentSwitch({ sessionID: () => route.sessionID })
+  const architecture = useArchitecture(() => route.sessionID)
   const location = createMemo(() => {
     const current = session()
     return current ? { directory: current.directory, workspaceID: current.workspaceID } : undefined
@@ -266,13 +276,14 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  // AIOven U4: one line per tool call, no code or diffs, thinking hidden.
+  const [compact, setCompact] = kv.signal("aioven_compact", true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
-    if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
-    return false
+    // AIOven UI v2: chat is full width; the old sidebar only opens on explicit toggle.
+    return sidebarOpen()
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
@@ -332,10 +343,10 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      local.agent.set("build")
+      local.agent.set("bake")
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
+      local.agent.set("recipe")
       lastSwitch = part.id
     }
   })
@@ -736,6 +747,15 @@ export function Session() {
       category: "Session",
       run: () => {
         setShowScrollbar((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: compact() ? "Show full transcript" : "Show compact transcript",
+      value: "session.toggle.compact",
+      category: "Session",
+      run: () => {
+        setCompact((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1168,6 +1188,7 @@ export function Session() {
           showTimestamps,
           showDetails,
           showGenericToolOutput,
+          compact,
           diffWrapMode,
           providers,
           sync,
@@ -1177,6 +1198,8 @@ export function Session() {
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
+              <AgentTabs sessionID={route.sessionID} architecture={architecture()} />
+              <Show when={View.current() === "chat"} fallback={<ArchitectureView model={architecture()} />}>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
@@ -1293,6 +1316,7 @@ export function Session() {
                   )}
                 </For>
               </scrollbox>
+              </Show>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt
@@ -1331,6 +1355,7 @@ export function Session() {
                     />
                   </pluginRuntime.Slot>
                 </Show>
+                <StatusBar sessionID={route.sessionID} />
               </box>
             </Show>
             <Toast />
@@ -1584,6 +1609,15 @@ const PART_MAPPING = {
 const INLINE_TOOL_ICON_WIDTH = 2
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
+  const ctx = use()
+  return (
+    <Show when={!ctx.compact()}>
+      <FullReasoningPart {...props} />
+    </Show>
+  )
+}
+
+function FullReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
@@ -1707,6 +1741,15 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+  const ctx = use()
+  return (
+    <Show when={ctx.compact()} fallback={<FullToolPart {...props} />}>
+      <CompactToolLine part={props.part} />
+    </Show>
+  )
+}
+
+function FullToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const ctx = use()
   const display = createMemo(() => toolDisplay(props.part.tool))
 
@@ -2703,4 +2746,28 @@ export function parseDiagnostics(value: unknown, filePath: string) {
       return [{ range: { start: { line, character } }, message }]
     })
     .slice(0, 3)
+}
+
+// AIOven U4: one-line tool summary; a task line opens the subagent's tab.
+function CompactToolLine(props: { part: ToolPart }) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const { navigate } = useRoute()
+  const line = createMemo(() =>
+    compactTool(props.part, (file) => (file ? path.relative(ctx.sync.path.directory || ".", file) || file : file)),
+  )
+  const color = () => (line().icon === "✗" ? theme.error : line().icon === "⏳" ? theme.accent : theme.textMuted)
+  return (
+    <box
+      paddingLeft={3}
+      onMouseUp={() => {
+        const id = props.part.state.status === "pending" ? undefined : props.part.state.metadata?.sessionId
+        if (typeof id === "string") navigate({ type: "session", sessionID: id })
+      }}
+    >
+      <text fg={theme.textMuted} wrapMode="none">
+        <span style={{ fg: color() }}>{line().icon}</span> {line().text}
+      </text>
+    </box>
+  )
 }

@@ -24,7 +24,7 @@ const messageID = MessageID.ascending()
 const partID = PartID.ascending()
 
 const agent: Agent.Info = {
-  name: "build",
+  name: "bake",
   mode: "primary",
   options: {},
   permission: [{ permission: "*", pattern: "*", action: "allow" }],
@@ -116,8 +116,8 @@ it.effect("preserves running tool start time across metadata updates", () =>
         sessionID,
         role: "assistant",
         parentID: MessageID.ascending(),
-        agent: "build",
-        mode: "build",
+        agent: "bake",
+        mode: "bake",
         path: { cwd: "/tmp", root: "/tmp" },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

@@ -25,7 +25,7 @@ async function hook() {
 function input(sessionID: string, providerID: string, npm: string) {
   return {
     sessionID,
-    agent: "build",
+    agent: "bake",
     model: { providerID, api: { npm } },
     message: { id: "msg_test", sessionID },
   } as Parameters<ChatHeaders>[0]

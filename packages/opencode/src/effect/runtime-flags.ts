@@ -40,11 +40,16 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   enableExperimentalModels: bool("OPENCODE_ENABLE_EXPERIMENTAL_MODELS"),
   enableQuestionTool: bool("OPENCODE_ENABLE_QUESTION_TOOL"),
   experimentalReferences: enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES"),
-  experimentalBackgroundSubagents: enabledByExperimental("OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS"),
+  // AIOven: background subagents are on unless explicitly disabled.
+  experimentalBackgroundSubagents: Config.boolean("OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS").pipe(
+    Config.withDefault(true),
+  ),
   experimentalLspTy: bool("OPENCODE_EXPERIMENTAL_LSP_TY"),
-  experimentalLspTool: enabledByExperimental("OPENCODE_EXPERIMENTAL_LSP_TOOL"),
+  // AIOven: the LSP tool is on unless explicitly disabled.
+  experimentalLspTool: Config.boolean("OPENCODE_EXPERIMENTAL_LSP_TOOL").pipe(Config.withDefault(true)),
   experimentalOxfmt: enabledByExperimental("OPENCODE_EXPERIMENTAL_OXFMT"),
-  experimentalPlanMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_PLAN_MODE"),
+  // AIOven: Claude-Code-style plan mode is on unless explicitly disabled.
+  experimentalPlanMode: Config.boolean("OPENCODE_EXPERIMENTAL_PLAN_MODE").pipe(Config.withDefault(true)),
   experimentalCodeMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_CODE_MODE"),
   experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),

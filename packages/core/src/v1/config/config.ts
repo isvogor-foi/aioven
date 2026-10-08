@@ -79,7 +79,7 @@ export const Info = Schema.Struct({
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
-      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+      "Default agent to use when none is specified. Must be a primary agent. Falls back to 'bake' if not set or if the specified agent is invalid.",
   }),
   subagent_depth: Schema.optional(NonNegativeInt).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1, which prevents subagents from launching subagents.",
@@ -166,6 +166,29 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  aioven: Schema.optional(
+    Schema.Struct({
+      tiers: Schema.optional(
+        Schema.Struct({
+          small: Schema.optional(Schema.String),
+          medium: Schema.optional(Schema.String),
+          large: Schema.optional(Schema.String),
+        }),
+      ).annotate({ description: "Model for each tier, in provider/model format" }),
+      terse: Schema.optional(Schema.Literals(["off", "lite", "full", "ultra"])).annotate({
+        description: "How compactly agents write and think (default: full)",
+      }),
+      agents: Schema.optional(
+        Schema.Record(
+          Schema.String,
+          Schema.Struct({
+            tier: Schema.optional(Schema.Literals(["small", "medium", "large"])),
+            budget: Schema.optional(PositiveInt).annotate({ description: "Soft token budget per run" }),
+          }),
+        ),
+      ),
+    }),
+  ).annotate({ description: "AIOven harness settings: model tiers, terse mode and per-agent budgets" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

@@ -141,11 +141,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={"This will allow " + props.request.permission + " until AIOven is restarted."} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>This will allow the following patterns until AIOven is restarted</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -483,7 +483,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           <text fg={theme.text}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>Tell AIOven what to do differently</text>
         </box>
       </box>
       <box
@@ -521,6 +521,9 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
     </box>
   )
 }
+
+// AIOven single-key answers for permission prompts.
+const HOTKEYS: Record<string, string> = { once: "y", always: "a", reject: "n", confirm: "y", cancel: "n" }
 
 function Prompt<const T extends Record<string, string>>(props: {
   title: string
@@ -621,6 +624,11 @@ function Prompt<const T extends Record<string, string>>(props: {
             },
           ]
         : []),
+      ...keys.flatMap((option) => {
+        const key = HOTKEYS[option as string]
+        if (!key) return []
+        return [{ key, desc: `Choose ${props.options[option]}`, group: "Permission", cmd: () => props.onSelect(option) }]
+      }),
       ...(props.escapeKey ? tuiConfig.keybinds.get("app.exit") : []),
       ...(props.fullscreen ? tuiConfig.keybinds.get("permission.prompt.fullscreen") : []),
     ],
@@ -689,6 +697,7 @@ function Prompt<const T extends Record<string, string>>(props: {
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
                   {props.options[option]}
+                  {HOTKEYS[option as string] ? ` (${HOTKEYS[option as string]})` : ""}
                 </text>
               </box>
             )}

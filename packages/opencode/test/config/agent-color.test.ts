@@ -12,15 +12,15 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const cfg = yield* Config.use.get()
-      expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
-      expect(cfg.agent?.["plan"]?.color).toBe("primary")
+      expect(cfg.agent?.["bake"]?.color).toBe("#FFA500")
+      expect(cfg.agent?.["recipe"]?.color).toBe("primary")
     }),
   {
     git: true,
     config: {
       agent: {
-        build: { color: "#FFA500" },
-        plan: { color: "primary" },
+        bake: { color: "#FFA500" },
+        recipe: { color: "primary" },
       },
     },
   },
@@ -30,17 +30,17 @@ it.instance(
   "Agent.get includes color from config",
   () =>
     Effect.gen(function* () {
-      const plan = yield* AgentSvc.use.get("plan")
+      const plan = yield* AgentSvc.use.get("recipe")
       expect(plan?.color).toBe("#A855F7")
-      const build = yield* AgentSvc.use.get("build")
+      const build = yield* AgentSvc.use.get("bake")
       expect(build?.color).toBe("accent")
     }),
   {
     git: true,
     config: {
       agent: {
-        plan: { color: "#A855F7" },
-        build: { color: "accent" },
+        recipe: { color: "#A855F7" },
+        bake: { color: "accent" },
       },
     },
   },

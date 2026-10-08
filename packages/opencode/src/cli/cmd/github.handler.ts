@@ -908,7 +908,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
               providerID,
               modelID,
             },
-            // agent is omitted - server will use default_agent from config or fall back to "build"
+            // agent is omitted - server will use default_agent from config or fall back to "bake"
             parts: [
               {
                 id: PartID.ascending(),

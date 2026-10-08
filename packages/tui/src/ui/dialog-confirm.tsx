@@ -35,6 +35,25 @@ export function DialogConfirm(props: DialogConfirmProps) {
           dialog.clear()
         },
       },
+      // AIOven single-key answers.
+      {
+        key: "y",
+        desc: "Confirm",
+        group: "Dialog",
+        cmd: () => {
+          props.onConfirm?.()
+          dialog.clear()
+        },
+      },
+      {
+        key: "n",
+        desc: "Cancel",
+        group: "Dialog",
+        cmd: () => {
+          props.onCancel?.()
+          dialog.clear()
+        },
+      },
       {
         key: "left",
         desc: "Previous dialog option",

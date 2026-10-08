@@ -987,7 +987,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/agent", { sessionID: ctx.state.id }),
       headers: { ...ctx.headers(), "content-type": "application/json" },
-      body: { agent: "plan" },
+      body: { agent: "recipe" },
     }))
     .status(204, undefined, "none"),
   http.protected
@@ -1453,7 +1453,7 @@ const scenarios: Scenario[] = [
       path: route("/session/{sessionID}/message", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {
-        agent: "build",
+        agent: "bake",
         model: { providerID: "test", modelID: "test-model" },
         parts: [{ type: "text", text: "hello llm" }],
       },
@@ -1488,7 +1488,7 @@ const scenarios: Scenario[] = [
       path: route("/session/{sessionID}/prompt_async", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {
-        agent: "build",
+        agent: "bake",
         model: { providerID: "test", modelID: "test-model" },
         parts: [{ type: "text", text: "hello async" }],
       },
@@ -1533,7 +1533,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/session/{sessionID}/shell", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
-      body: { agent: "build", model: { providerID: "test", modelID: "test-model" }, command: "printf shell-ok" },
+      body: { agent: "bake", model: { providerID: "test", modelID: "test-model" }, command: "printf shell-ok" },
     }))
     .json(
       200,

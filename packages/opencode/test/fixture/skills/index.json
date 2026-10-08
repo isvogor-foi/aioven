@@ -1,6 +1,6 @@
 {
   "skills": [
-    { "name": "agents-sdk", "description": "Cloudflare Agents SDK", "files": ["SKILL.md", "references/callable.md"] },
-    { "name": "cloudflare", "description": "Cloudflare Platform Skill", "files": ["SKILL.md"] }
+    { "name": "sample-a", "description": "Sample skill with a reference file", "files": ["SKILL.md", "references/notes.md"] },
+    { "name": "sample-b", "description": "Sample skill without references", "files": ["SKILL.md"] }
   ]
 }

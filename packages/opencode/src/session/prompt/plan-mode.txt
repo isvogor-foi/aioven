@@ -8,11 +8,11 @@ You should build your plan incrementally by writing to or editing this file. NOT
 ## Plan Workflow
 
 ### Phase 1: Initial Understanding
-Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the explore subagent type.
+Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the pantry subagent type.
 
 1. Focus on understanding the user's request and the code associated with their request
 
-2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
+2. **Launch up to 3 pantry agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
  - Use 1 agent when the task is isolated to known files, the user provided specific file paths, or you're making a small targeted change.
  - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
  - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
@@ -20,32 +20,18 @@ Goal: Gain a comprehensive understanding of the user's request by reading throug
 
 3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
 
-### Phase 2: Design
-Goal: Design an implementation approach.
+### Phase 2: Architecture (component-based design)
+Goal: Define the architecture BEFORE any implementation steps. Do this yourself; do not delegate design to subagents.
 
-Launch general agent(s) to design the implementation based on the user's intent and your exploration results from Phase 1.
+Define, in this order:
+1. **Components**: each unit (module, service, class, UI component) with one responsibility. Mark which exist (reuse) and which are new. Write them under a `### Components` heading, one bullet each, EXACTLY in this format (the UI parses it):
+   `- **<Name>** (new|reuse) — paths: <file or dir>[, <file or dir>…] — <responsibility>`
+2. **Interfaces**: the contract of each component: exported functions/methods with signatures and types, data shapes, events, errors. Interfaces are designed before internals. Under a `### Interfaces` heading, one bullet per interface, EXACTLY:
+   `- **<Component>**: \`<signature or event>\``
+3. **Communication**: how components talk: who calls whom, sync vs async, events/messages, data flow and ownership of state. Prefer narrow interfaces and one-directional dependencies; no component reaches into another's internals. Under a `### Communication` heading, one bullet per link, EXACTLY:
+   `- <From> → <To>: <what> (sync|async|event)`
 
-You can launch up to 1 agent(s) in parallel.
-
-**Guidelines:**
-- **Default**: Launch at least 1 Plan agent for most tasks - it helps validate your understanding and consider alternatives
-- **Skip agents**: Only for truly trivial tasks (typo fixes, single-line changes, simple renames)
-
-Examples of when to use multiple agents:
-- The task touches multiple parts of the codebase
-- It's a large refactor or architectural change
-- There are many edge cases to consider
-- You'd benefit from exploring different approaches
-
-Example perspectives by task type:
-- New feature: simplicity vs performance vs maintainability
-- Bug fix: root cause vs workaround vs prevention
-- Refactoring: minimal change vs clean architecture
-
-In the agent prompt:
-- Provide comprehensive background context from Phase 1 exploration including filenames and code path traces
-- Describe requirements and constraints
-- Request a detailed implementation plan
+Only after the architecture is clear, derive the implementation steps from it, one step per component or interface change. Each step must name its component exactly as written in the Components list.
 
 ### Phase 3: Review
 Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
@@ -55,6 +41,7 @@ Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's inten
 
 ### Phase 4: Final Plan
 Goal: Write your final plan to the plan file (the only file you can edit).
+- Required sections, in order: Context, Architecture (Components, Interfaces, Communication), Implementation steps, Verification
 - Include only your recommended approach, not all alternatives
 - Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
 - Include the paths of critical files to be modified

@@ -12,18 +12,18 @@ describe("hasCustomAgent", () => {
 })
 
 describe("resolveAgent", () => {
-  const agents = [{ name: "plan" }, { name: "build" }, { name: "custom" }]
+  const agents = [{ name: "recipe" }, { name: "bake" }, { name: "custom" }]
 
   test("uses the requested available agent", () => {
     expect(resolveAgent(agents, "custom")?.name).toBe("custom")
   })
 
-  test("defaults to build", () => {
-    expect(resolveAgent(agents)?.name).toBe("build")
-    expect(resolveAgent(agents, "missing")?.name).toBe("build")
+  test("defaults to bake", () => {
+    expect(resolveAgent(agents)?.name).toBe("bake")
+    expect(resolveAgent(agents, "missing")?.name).toBe("bake")
   })
 
-  test("uses the first agent when build is unavailable", () => {
+  test("uses the first agent when bake is unavailable", () => {
     expect(resolveAgent([{ name: "custom" }], "missing")?.name).toBe("custom")
   })
 })

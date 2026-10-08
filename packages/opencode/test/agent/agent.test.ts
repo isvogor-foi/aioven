@@ -48,10 +48,13 @@ it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {
     const agents = yield* load((svc) => svc.list())
     const names = agents.map((a) => a.name)
-    expect(names).toContain("build")
-    expect(names).toContain("plan")
-    expect(names).toContain("general")
-    expect(names).toContain("explore")
+    expect(names).toContain("bake")
+    expect(names).toContain("recipe")
+    expect(names).not.toContain("general")
+    expect(names).toContain("pantry")
+    expect(names).toContain("taster")
+    expect(names).toContain("thermometer")
+    expect(names).toContain("cookbook")
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
@@ -60,7 +63,7 @@ it.instance("returns default native agents when no config", () =>
 
 it.instance("build agent has correct default properties", () =>
   Effect.gen(function* () {
-    const build = yield* load((svc) => svc.get("build"))
+    const build = yield* load((svc) => svc.get("bake"))
     expect(build).toBeDefined()
     expect(build?.mode).toBe("primary")
     expect(build?.native).toBe(true)
@@ -71,7 +74,7 @@ it.instance("build agent has correct default properties", () =>
 
 it.instance("plan agent denies edits except .opencode/plans/*", () =>
   Effect.gen(function* () {
-    const plan = yield* load((svc) => svc.get("plan"))
+    const plan = yield* load((svc) => svc.get("recipe"))
     expect(plan).toBeDefined()
     // Wildcard is denied
     expect(evalPerm(plan, "edit")).toBe("deny")
@@ -82,10 +85,10 @@ it.instance("plan agent denies edits except .opencode/plans/*", () =>
 
 it.instance("plan agent denies the general subagent by default", () =>
   Effect.gen(function* () {
-    const plan = yield* load((svc) => svc.get("plan"))
+    const plan = yield* load((svc) => svc.get("recipe"))
     expect(plan).toBeDefined()
     expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("deny")
-    expect(Permission.evaluate("task", "explore", plan!.permission).action).toBe("allow")
+    expect(Permission.evaluate("task", "pantry", plan!.permission).action).toBe("allow")
     expect(Permission.evaluate("task", "custom", plan!.permission).action).toBe("allow")
   }),
 )
@@ -94,7 +97,7 @@ it.instance(
   "user permission can allow the general subagent from plan mode",
   () =>
     Effect.gen(function* () {
-      const plan = yield* load((svc) => svc.get("plan"))
+      const plan = yield* load((svc) => svc.get("recipe"))
       expect(plan).toBeDefined()
       expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("allow")
     }),
@@ -111,7 +114,7 @@ it.instance(
 
 it.instance("explore agent denies edit and write", () =>
   Effect.gen(function* () {
-    const explore = yield* load((svc) => svc.get("explore"))
+    const explore = yield* load((svc) => svc.get("pantry"))
     expect(explore).toBeDefined()
     expect(explore?.mode).toBe("subagent")
     expect(evalPerm(explore, "edit")).toBe("deny")
@@ -122,7 +125,7 @@ it.instance("explore agent denies edit and write", () =>
 
 it.instance("explore agent asks for external directories and allows whitelisted external paths", () =>
   Effect.gen(function* () {
-    const explore = yield* load((svc) => svc.get("explore"))
+    const explore = yield* load((svc) => svc.get("pantry"))
     expect(explore).toBeDefined()
     expect(Permission.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
     expect(Permission.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
@@ -160,13 +163,18 @@ it.instance(
   },
 )
 
-it.instance("general agent denies todo tools", () =>
+it.instance("aioven subagents are read-only", () =>
   Effect.gen(function* () {
-    const general = yield* load((svc) => svc.get("general"))
-    expect(general).toBeDefined()
-    expect(general?.mode).toBe("subagent")
-    expect(general?.hidden).toBeUndefined()
-    expect(evalPerm(general, "todowrite")).toBe("deny")
+    for (const name of ["taster", "thermometer", "cookbook"]) {
+      const agent = yield* load((svc) => svc.get(name))
+      expect(agent?.mode).toBe("subagent")
+      expect(evalPerm(agent, "edit")).toBe("deny")
+      expect(evalPerm(agent, "todowrite")).toBe("deny")
+      expect(evalPerm(agent, "task")).toBe("deny")
+    }
+    const review = yield* load((svc) => svc.get("taster"))
+    expect(Permission.evaluate("bash", "git diff", review!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "rm -rf x", review!.permission).action).toBe("deny")
   }),
 )
 
@@ -213,7 +221,7 @@ it.instance(
   "custom agent config overrides native agent properties",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build).toBeDefined()
       expect(String(build?.model?.providerID)).toBe("anthropic")
       expect(String(build?.model?.modelID)).toBe("claude-3")
@@ -225,7 +233,7 @@ it.instance(
   {
     config: {
       agent: {
-        build: {
+        bake: {
           model: "anthropic/claude-3",
           description: "Custom build agent",
           temperature: 0.7,
@@ -240,16 +248,16 @@ it.instance(
   "agent disable removes agent from list",
   () =>
     Effect.gen(function* () {
-      const explore = yield* load((svc) => svc.get("explore"))
+      const explore = yield* load((svc) => svc.get("pantry"))
       expect(explore).toBeUndefined()
       const agents = yield* load((svc) => svc.list())
       const names = agents.map((a) => a.name)
-      expect(names).not.toContain("explore")
+      expect(names).not.toContain("pantry")
     }),
   {
     config: {
       agent: {
-        explore: { disable: true },
+        pantry: { disable: true },
       },
     },
   },
@@ -259,7 +267,7 @@ it.instance(
   "agent permission config merges with defaults",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build).toBeDefined()
       // Specific pattern is denied
       expect(Permission.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
@@ -269,7 +277,7 @@ it.instance(
   {
     config: {
       agent: {
-        build: {
+        bake: {
           permission: {
             bash: {
               "rm -rf *": "deny",
@@ -285,7 +293,7 @@ it.instance(
   "global permission config applies to all agents",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build).toBeDefined()
       expect(evalPerm(build, "bash")).toBe("deny")
     }),
@@ -302,16 +310,16 @@ it.instance(
   "agent steps/maxSteps config sets steps property",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
-      const plan = yield* load((svc) => svc.get("plan"))
+      const build = yield* load((svc) => svc.get("bake"))
+      const plan = yield* load((svc) => svc.get("recipe"))
       expect(build?.steps).toBe(50)
       expect(plan?.steps).toBe(100)
     }),
   {
     config: {
       agent: {
-        build: { steps: 50 },
-        plan: { maxSteps: 100 },
+        bake: { steps: 50 },
+        recipe: { maxSteps: 100 },
       },
     },
   },
@@ -321,13 +329,13 @@ it.instance(
   "agent mode can be overridden",
   () =>
     Effect.gen(function* () {
-      const explore = yield* load((svc) => svc.get("explore"))
+      const explore = yield* load((svc) => svc.get("pantry"))
       expect(explore?.mode).toBe("primary")
     }),
   {
     config: {
       agent: {
-        explore: { mode: "primary" },
+        pantry: { mode: "primary" },
       },
     },
   },
@@ -337,13 +345,13 @@ it.instance(
   "agent name can be overridden",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build?.name).toBe("Builder")
     }),
   {
     config: {
       agent: {
-        build: { name: "Builder" },
+        bake: { name: "Builder" },
       },
     },
   },
@@ -353,13 +361,13 @@ it.instance(
   "agent prompt can be set from config",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build?.prompt).toBe("Custom system prompt")
     }),
   {
     config: {
       agent: {
-        build: { prompt: "Custom system prompt" },
+        bake: { prompt: "Custom system prompt" },
       },
     },
   },
@@ -369,14 +377,14 @@ it.instance(
   "unknown agent properties are placed into options",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build?.options.random_property).toBe("hello")
       expect(build?.options.another_random).toBe(123)
     }),
   {
     config: {
       agent: {
-        build: {
+        bake: {
           random_property: "hello",
           another_random: 123,
         },
@@ -389,14 +397,14 @@ it.instance(
   "agent options merge correctly",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(build?.options.custom_option).toBe(true)
       expect(build?.options.another_option).toBe("value")
     }),
   {
     config: {
       agent: {
-        build: {
+        bake: {
           options: {
             custom_option: true,
             another_option: "value",
@@ -439,12 +447,12 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const names = (yield* load((svc) => svc.list())).map((a) => a.name)
-      expect(names[0]).toBe("plan")
+      expect(names[0]).toBe("recipe")
       expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
     }),
   {
     config: {
-      default_agent: "plan",
+      default_agent: "recipe",
       agent: {
         zebra: {
           description: "Zebra",
@@ -468,7 +476,7 @@ it.instance("Agent.get returns undefined for non-existent agent", () =>
 
 it.instance("default permission includes doom_loop and external_directory as ask", () =>
   Effect.gen(function* () {
-    const build = yield* load((svc) => svc.get("build"))
+    const build = yield* load((svc) => svc.get("bake"))
     expect(evalPerm(build, "doom_loop")).toBe("ask")
     expect(evalPerm(build, "external_directory")).toBe("ask")
   }),
@@ -476,7 +484,7 @@ it.instance("default permission includes doom_loop and external_directory as ask
 
 it.instance("webfetch is allowed by default", () =>
   Effect.gen(function* () {
-    const build = yield* load((svc) => svc.get("build"))
+    const build = yield* load((svc) => svc.get("bake"))
     expect(evalPerm(build, "webfetch")).toBe("allow")
   }),
 )
@@ -485,14 +493,14 @@ it.instance(
   "legacy tools config converts to permissions",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(evalPerm(build, "bash")).toBe("deny")
       expect(evalPerm(build, "read")).toBe("deny")
     }),
   {
     config: {
       agent: {
-        build: {
+        bake: {
           tools: {
             bash: false,
             read: false,
@@ -507,13 +515,13 @@ it.instance(
   "legacy tools config maps write/edit/patch to edit permission",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(evalPerm(build, "edit")).toBe("deny")
     }),
   {
     config: {
       agent: {
-        build: {
+        bake: {
           tools: {
             write: false,
           },
@@ -527,7 +535,7 @@ it.instance(
   "Truncate.GLOB is allowed even when user denies external_directory globally",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
       expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
       expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
@@ -543,7 +551,7 @@ it.instance(
 
 it.instance("global tmp directory children are allowed for external_directory", () =>
   Effect.gen(function* () {
-    const build = yield* load((svc) => svc.get("build"))
+    const build = yield* load((svc) => svc.get("bake"))
     expect(
       Permission.evaluate("external_directory", path.join(Global.Path.tmp, "scratch"), build!.permission).action,
     ).toBe("allow")
@@ -555,7 +563,7 @@ it.instance(
   "Truncate.GLOB is allowed even when user denies external_directory per-agent",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
       expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
       expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
@@ -563,7 +571,7 @@ it.instance(
   {
     config: {
       agent: {
-        build: {
+        bake: {
           permission: {
             external_directory: "deny",
           },
@@ -577,7 +585,7 @@ it.instance(
   "explicit Truncate.GLOB deny is respected",
   () =>
     Effect.gen(function* () {
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("deny")
       expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
     }),
@@ -620,7 +628,7 @@ description: Permission skill.
         }),
       )
 
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       const target = path.join(skillDir, "reference", "notes.md")
       expect(Permission.evaluate("external_directory", target, build!.permission).action).toBe("allow")
     }),
@@ -632,7 +640,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const build = yield* load((svc) => svc.get("build"))
+      const build = yield* load((svc) => svc.get("bake"))
       const target = path.resolve(test.directory, "../docs/reference/notes.md")
       expect(Permission.evaluate("external_directory", target, build!.permission).action).toBe("allow")
     }),
@@ -649,14 +657,14 @@ it.instance(
 it.instance("defaultAgent returns build when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultAgent())
-    expect(agent).toBe("build")
+    expect(agent).toBe("bake")
   }),
 )
 
 it.instance("defaultInfo returns resolved build agent when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultInfo())
-    expect(agent.name).toBe("build")
+    expect(agent.name).toBe("bake")
     expect(agent.mode).toBe("primary")
   }),
 )
@@ -666,11 +674,11 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const agent = yield* load((svc) => svc.defaultAgent())
-      expect(agent).toBe("plan")
+      expect(agent).toBe("recipe")
     }),
   {
     config: {
-      default_agent: "plan",
+      default_agent: "recipe",
     },
   },
 )
@@ -696,10 +704,10 @@ it.instance(
 
 it.instance(
   "defaultAgent throws when default_agent points to subagent",
-  () => expectDefaultAgentError('default agent "explore" is a subagent'),
+  () => expectDefaultAgentError('default agent "pantry" is a subagent'),
   {
     config: {
-      default_agent: "explore",
+      default_agent: "pantry",
     },
   },
 )
@@ -730,12 +738,12 @@ it.instance(
     Effect.gen(function* () {
       const agent = yield* load((svc) => svc.defaultAgent())
       // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("recipe")
     }),
   {
     config: {
       agent: {
-        build: { disable: true },
+        bake: { disable: true },
       },
     },
   },
@@ -747,8 +755,8 @@ it.instance(
   {
     config: {
       agent: {
-        build: { disable: true },
-        plan: { disable: true },
+        bake: { disable: true },
+        recipe: { disable: true },
       },
     },
   },

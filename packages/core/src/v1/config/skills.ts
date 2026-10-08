@@ -9,5 +9,8 @@ export const Info = Schema.Struct({
   urls: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
   }),
+  exclude: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Skill names never to load, from any source (AIOven)",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>

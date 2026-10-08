@@ -16,7 +16,8 @@
     "dev:temporary": "bun run ./src/temporary.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "opencode": "./bin/opencode",
+    "aioven": "./bin/opencode"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -74,6 +75,7 @@
     "@ai-sdk/togetherai": "2.0.68",
     "@ai-sdk/vercel": "2.0.39",
     "@ai-sdk/xai": "3.0.139",
+    "@ast-grep/cli": "0.45.3",
     "@aws-sdk/credential-providers": "3.1057.0",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/opentelemetry": "catalog:",

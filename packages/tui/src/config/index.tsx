@@ -85,6 +85,8 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
     sounds: AttentionSoundPaths
   }
   keybinds: TuiKeybind.BindingLookupView
+  /** The user's raw keybind overrides, so run mode can rebuild without AIOven keys. */
+  keybind_overrides: TuiKeybind.KeybindOverrides
   leader_timeout: number
   mouse: boolean
   cursor?: {
@@ -95,11 +97,22 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
 
 export const ResolveOptions = Schema.Struct({
   terminalSuspend: Schema.Boolean,
+  aioven: Schema.optional(Schema.Boolean),
 })
+
+// AIOven chat keys: Enter = newline, Shift/Alt+Enter = send. Applied unless
+// `aioven: false` (run mode), and always below the user's own keybind overrides.
+export const AIOvenKeybinds: TuiKeybind.KeybindOverrides = {
+  input_submit: "shift+return,alt+return",
+  input_newline: "return,ctrl+return,ctrl+j",
+}
 export type ResolveOptions = Schema.Schema.Type<typeof ResolveOptions>
 
 export function resolve(input: Info, options: ResolveOptions): Resolved {
-  const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
+  const keybinds: TuiKeybind.KeybindOverrides = {
+    ...(options.aioven === false ? {} : AIOvenKeybinds),
+    ...input.keybinds,
+  }
   if (!options.terminalSuspend) {
     keybinds.terminal_suspend = "none"
     if (keybinds.input_undo === undefined) {
@@ -120,6 +133,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
       sound_pack: input.attention?.sound_pack ?? "opencode.default",
       sounds: input.attention?.sounds ?? {},
     },
+    keybind_overrides: input.keybinds ?? {},
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(TuiKeybind.parse(keybinds)), {
       commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),

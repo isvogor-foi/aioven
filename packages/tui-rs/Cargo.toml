@@ -1,0 +1,25 @@
+[package]
+name = "aioven-tui"
+version = "0.1.0"
+edition = "2024"
+description = "AIOven terminal UI (Ratatui client for the AIOven server)"
+
+[[bin]]
+name = "aioven-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest-eventsource = "0.6"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+pulldown-cmark = { version = "0.12", default-features = false }
+tui-textarea = "0.7"
+anyhow = "1"
+url = "2"
+unicode-width = "0.2"
+async-trait = "0.1"

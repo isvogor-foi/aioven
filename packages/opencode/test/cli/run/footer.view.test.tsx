@@ -35,7 +35,8 @@ import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
 import { RejectField } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
-const tuiConfig = createTuiResolvedConfig()
+// Run mode keeps upstream keys (Enter sends).
+const tuiConfig = createTuiResolvedConfig({}, { aioven: false })
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {

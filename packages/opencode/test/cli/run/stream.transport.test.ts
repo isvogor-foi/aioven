@@ -199,7 +199,7 @@ function assistantMessage(input: { sessionID: string; id: string; parts: Session
       modelID: "gpt-5",
       providerID: "openai",
       mode: "chat",
-      agent: "build",
+      agent: "bake",
       path: {
         cwd: "/tmp",
         root: "/tmp",
@@ -1206,8 +1206,8 @@ describe("run stream transport", () => {
                   callID: "call-1",
                   tool: "task",
                   body: {
-                    description: "Explore run folder",
-                    subagent_type: "explore",
+                    description: "Pantry run folder",
+                    subagent_type: "pantry",
                   },
                   metadata: {
                     sessionId: "child-1",
@@ -1259,8 +1259,8 @@ describe("run stream transport", () => {
                     callID: "call-1",
                     tool: "task",
                     body: {
-                      description: "Explore run folder",
-                      subagent_type: "explore",
+                      description: "Pantry run folder",
+                      subagent_type: "pantry",
                     },
                     metadata: {
                       sessionId: "child-1",
@@ -1327,7 +1327,7 @@ describe("run stream transport", () => {
       expect(boot.tabs).toEqual([
         expect.objectContaining({
           sessionID: "child-1",
-          label: "Explore",
+          label: "Pantry",
           description: "Pending permission",
           status: "running",
         }),
@@ -1417,8 +1417,8 @@ describe("run stream transport", () => {
                     callID: "call-1",
                     tool: "task",
                     body: {
-                      description: "Explore run.ts",
-                      subagent_type: "explore",
+                      description: "Pantry run.ts",
+                      subagent_type: "pantry",
                     },
                     metadata: {
                       sessionId: "child-1",
@@ -1500,8 +1500,8 @@ describe("run stream transport", () => {
                     callID: "call-1",
                     tool: "task",
                     body: {
-                      description: "Explore run.ts",
-                      subagent_type: "explore",
+                      description: "Pantry run.ts",
+                      subagent_type: "pantry",
                     },
                     metadata: {
                       sessionId: "child-1",
@@ -1605,8 +1605,8 @@ describe("run stream transport", () => {
               callID: "call-1",
               tool: "task",
               body: {
-                description: "Explore run.ts",
-                subagent_type: "explore",
+                description: "Pantry run.ts",
+                subagent_type: "pantry",
               },
               metadata: {
                 sessionId: "child-1",
@@ -1680,8 +1680,8 @@ describe("run stream transport", () => {
               callID: "call-1",
               tool: "task",
               body: {
-                description: "Explore run.ts",
-                subagent_type: "explore",
+                description: "Pantry run.ts",
+                subagent_type: "pantry",
               },
               metadata: {
                 sessionId: "child-1",
