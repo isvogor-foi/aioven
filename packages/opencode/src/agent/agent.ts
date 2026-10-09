@@ -11,10 +11,10 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_EXPLORE from "./prompt/explore.txt"
-import PROMPT_RESEARCH from "./prompt/research.txt"
-import PROMPT_REVIEW from "./prompt/review.txt"
-import PROMPT_TEST_RUNNER from "./prompt/test-runner.txt"
+import PROMPT_PANTRY from "./prompt/pantry.txt"
+import PROMPT_COOKBOOK from "./prompt/cookbook.txt"
+import PROMPT_TASTER from "./prompt/taster.txt"
+import PROMPT_THERMOMETER from "./prompt/thermometer.txt"
 import { AIOven } from "@/aioven"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -208,7 +208,7 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            prompt: PROMPT_REVIEW,
+            prompt: PROMPT_TASTER,
             options: {},
             mode: "subagent",
             native: true,
@@ -229,7 +229,7 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            prompt: PROMPT_TEST_RUNNER,
+            prompt: PROMPT_THERMOMETER,
             options: {},
             mode: "subagent",
             native: true,
@@ -251,7 +251,7 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            prompt: PROMPT_RESEARCH,
+            prompt: PROMPT_COOKBOOK,
             options: {},
             mode: "subagent",
             native: true,
@@ -276,7 +276,7 @@ const layer = Layer.effect(
               user,
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
-            prompt: PROMPT_EXPLORE,
+            prompt: PROMPT_PANTRY,
             options: {},
             mode: "subagent",
             native: true,

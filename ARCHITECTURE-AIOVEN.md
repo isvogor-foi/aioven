@@ -864,3 +864,24 @@ fn lines(patch: &str) -> Vec<(Kind, String)>   // Kind: Add | Del | Hunk | Conte
 struct Palette { text, muted, dim, accent, blue, panel, selected, green, yellow, red, code }
 fn palette(name) -> Palette; Theme::* reads the active palette (set once at start / on change)
 ```
+
+## P3–P15 status (2026-10-09)
+
+Verified live in tmux with a fake model (`scratchpad/p/fake2.ts`) unless noted.
+
+| # | Status |
+|---|---|
+| P8 | ✓ 0 sessions in the DB before the first prompt, 1 after; `+ New session` just resets to pending. |
+| P3 | ✓ `@not` → picker shows `notes.md`; Tab inserts it; the model received the file content (`saw the file`). |
+| P4 | ✓ `!echo shellok` ran in the session; Ctrl+E with `EDITOR='sed -i s/draft/edited/'` turned "draft text" into "edited text". |
+| P5 | ✓ rename (DB title updated), undo ×2 (oven.txt back to `cold`, prompt restored to the input, turn hidden), redo (`hot` again), export (`aioven-<slug>.md`), delete with y/n (0 sessions). Copy-to-clipboard is dropped: tmux `set-clipboard external` blocks it, so use export. |
+| P6 | ✓ unit-tested; real `/provider` exposes the variants (Gemini low/medium/high). The prompt body `variant` is part of the upstream API. |
+| P7 | ✓ blueprint lists `oven.txt +1 −1` during the session; `[ ]` select, Enter opens a coloured `DIFF oven.txt` (−cold/+hot). New server endpoint `GET /experimental/aioven/session/:id/diff` (upstream `/diff` is per turn only). |
+| P9 | ✓ `bin/aioven` rebuilds the client when it is missing or stale; `bin/aioven-install`. |
+| P10 | ✓ 5 TestBackend render tests (top bar/status, pending session, permission dialog, diff view, usage + theme). |
+| P11 | ✓ agent prompt files renamed (pantry/taster/thermometer/cookbook.txt); README is now AIOven (the OpenCode README is kept as README.opencode.md). Web/desktop apps left as upstream. |
+| P12 | ✓ `docs/aioven-upstream.md`; trial merge of `upstream/dev` (14 commits) was clean and was not merged. |
+| P14 | ✓ write-permission test expects `0o666 & ~umask`. |
+| P15 | ✓ themes blue/midnight/mono/light; saved as `aioven.theme` (schema added). |
+| P1, P2 | **Not done:** they need the user's login and paid runs; steps in `docs/aioven-validation.md`. |
+| P13 | Push/merge waits for the user's confirmation. |
