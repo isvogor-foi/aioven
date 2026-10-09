@@ -2,6 +2,7 @@ import { AccountID, OrgID } from "@/account/schema"
 import { MCP } from "@/mcp"
 
 import { Session } from "@/session/session"
+import { Snapshot } from "@/snapshot"
 import { SessionID } from "@/session/schema"
 import { Worktree } from "@/worktree"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
@@ -110,6 +111,7 @@ export const SessionListQuery = Schema.Struct({
 export const ExperimentalPaths = {
   capabilities: "/experimental/capabilities",
   aiovenUsage: "/experimental/aioven/usage",
+  aiovenDiff: "/experimental/aioven/session/:sessionID/diff",
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
   consoleSwitch: "/experimental/console/switch",
@@ -144,6 +146,17 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "experimental.aioven.usage",
             summary: "AIOven usage",
             description: "Token usage and cost per local day across all sessions (AIOven usage page).",
+          }),
+        ),
+        HttpApiEndpoint.get("aiovenDiff", ExperimentalPaths.aiovenDiff, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(Snapshot.FileDiff), "Files changed in the whole session"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.aioven.diff",
+            summary: "AIOven session diff",
+            description: "Diff of every file changed in the session, from its first snapshot to its last (AIOven blueprint).",
           }),
         ),
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {

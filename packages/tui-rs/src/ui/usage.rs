@@ -41,9 +41,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         )),
         Line::default(),
         Line::from(vec![
-            Span::styled("← ", Style::default().fg(Theme::AQUA)),
+            Span::styled("← ", Style::default().fg(Theme::c().aqua)),
             Span::styled(format!("{year}"), Theme::title()),
-            Span::styled(" →", Style::default().fg(Theme::AQUA)),
+            Span::styled(" →", Style::default().fg(Theme::c().aqua)),
             Span::styled("   tokens per day", Theme::muted()),
         ]),
     ];
@@ -95,8 +95,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         let filled = if max > 0.0 { ((total / max) * bar_w as f64).round() as usize } else { 0 };
         lines.push(Line::from(vec![
             Span::styled(format!("{}  ", MONTHS[m]), Theme::muted()),
-            Span::styled("█".repeat(filled), Style::default().fg(Theme::BLUE)),
-            Span::styled("▒".repeat(bar_w - filled), Style::default().fg(Theme::DIM)),
+            Span::styled("█".repeat(filled), Style::default().fg(Theme::c().blue)),
+            Span::styled("▒".repeat(bar_w - filled), Style::default().fg(Theme::c().dim)),
             Span::styled(format!(" {}", if *total > 0.0 { tokens(*total) } else { "·".into() }), Theme::text()),
         ]));
     }

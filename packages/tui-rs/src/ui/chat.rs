@@ -15,7 +15,7 @@ use crate::markdown::{self, Palette};
 use crate::types::*;
 
 fn palette() -> Palette {
-    Palette { text: Theme::TEXT, muted: Theme::MUTED, accent: Theme::AQUA, code: Theme::CODE }
+    Palette { text: Theme::c().text, muted: Theme::c().muted, accent: Theme::c().aqua, code: Theme::c().code }
 }
 
 fn relative(dir: &str) -> impl Fn(&str) -> String + '_ {
@@ -25,7 +25,7 @@ fn relative(dir: &str) -> impl Fn(&str) -> String + '_ {
 pub fn build(app: &App) -> Text<'static> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     let dir = app.store.sessions.get(&app.root).map(|s| s.directory.clone()).unwrap_or_default();
-    let messages = app.store.messages(&app.viewing);
+    let messages = crate::derive::visible(&app.store, &app.viewing);
     for (index, message) in messages.iter().enumerate() {
         // one footer per turn: only after the last assistant message before the next user message
         let turn_end = !matches!(messages.get(index + 1), Some(Message::Assistant(_)));
@@ -45,7 +45,7 @@ pub fn build(app: &App) -> Text<'static> {
                 }
                 lines.push(Line::default());
                 for (i, l) in text.lines().enumerate() {
-                    let head = if i == 0 { Span::styled("you ▸ ", Style::default().fg(Theme::BLUE).add_modifier(Modifier::BOLD)) } else { Span::raw("      ") };
+                    let head = if i == 0 { Span::styled("you ▸ ", Style::default().fg(Theme::c().blue).add_modifier(Modifier::BOLD)) } else { Span::raw("      ") };
                     lines.push(Line::from(vec![head, Span::styled(l.to_string(), Theme::text().add_modifier(Modifier::BOLD))]));
                 }
                 lines.push(Line::default());
@@ -58,15 +58,15 @@ pub fn build(app: &App) -> Text<'static> {
                         }
                         PartKind::Reasoning { text } if !app.compact && !text.trim().is_empty() => {
                             for l in text.lines() {
-                                lines.push(Line::from(Span::styled(format!("  {l}"), Style::default().fg(Theme::DIM).add_modifier(Modifier::ITALIC))));
+                                lines.push(Line::from(Span::styled(format!("  {l}"), Style::default().fg(Theme::c().dim).add_modifier(Modifier::ITALIC))));
                             }
                         }
                         PartKind::Tool { tool, state, .. } => {
                             let c = compact(tool, state, relative(&dir));
                             let color = match c.icon {
-                                "✗" => Theme::RED,
-                                "⏳" => Theme::AQUA,
-                                _ => Theme::MUTED,
+                                "✗" => Theme::c().red,
+                                "⏳" => Theme::c().aqua,
+                                _ => Theme::c().muted,
                             };
                             lines.push(Line::from(vec![
                                 Span::styled(format!("  {} ", c.icon), Style::default().fg(color)),
@@ -81,7 +81,7 @@ pub fn build(app: &App) -> Text<'static> {
                                     _ => String::new(),
                                 };
                                 for l in detail.lines().take(8) {
-                                    lines.push(Line::from(Span::styled(format!("      {l}"), Style::default().fg(Theme::DIM))));
+                                    lines.push(Line::from(Span::styled(format!("      {l}"), Style::default().fg(Theme::c().dim))));
                                 }
                             }
                         }
@@ -90,12 +90,12 @@ pub fn build(app: &App) -> Text<'static> {
                 }
                 if let Some(err) = &a.error {
                     let w = if err.get("name").and_then(Value::as_str) == Some("MessageAbortedError") { "pulled out".to_string() } else { derive::label(&derive::Wait::Error(err.get("data").and_then(|d| d.get("message")).and_then(Value::as_str).unwrap_or("error").to_string()), 0) };
-                    lines.push(Line::from(Span::styled(format!("  ■ {w}"), Style::default().fg(Theme::RED))));
+                    lines.push(Line::from(Span::styled(format!("  ■ {w}"), Style::default().fg(Theme::c().red))));
                 }
                 if a.time.completed.is_some() && turn_end {
                     lines.push(Line::from(Span::styled(
                         format!("  ▣ {} · {}", a.agent, a.model_id),
-                        Style::default().fg(Theme::DIM),
+                        Style::default().fg(Theme::c().dim),
                     )));
                 }
             }
@@ -106,7 +106,7 @@ pub fn build(app: &App) -> Text<'static> {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(
             format!("  ↻ {}", derive::label(&app.wait(&app.viewing), app.now)),
-            Style::default().fg(Theme::RED).add_modifier(Modifier::BOLD),
+            Style::default().fg(Theme::c().red).add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::styled(
             "    esc stop · ctrl+p → model or connect provider to switch",

@@ -176,7 +176,10 @@ export const Info = Schema.Struct({
         }),
       ).annotate({ description: "Model for each tier, in provider/model format" }),
       terse: Schema.optional(Schema.Literals(["off", "lite", "full", "ultra"])).annotate({
-        description: "How compactly agents write and think (default: full)",
+        description: "How compactly agents write and think (default: ultra)",
+      }),
+      theme: Schema.optional(Schema.String).annotate({
+        description: "Colour theme of the AIOven terminal client (blue, midnight, mono, light)",
       }),
       agents: Schema.optional(
         Schema.Record(

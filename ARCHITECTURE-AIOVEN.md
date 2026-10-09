@@ -804,3 +804,63 @@ menu Item::TierModel { tier, provider, model }     // "Tier small: <model>  ✓"
 - **T24 caveman level:** verified live. It is saved to the global config (`aioven.terse`), and the menu shows ✓ on the current level.
 - **T25 tiers:** verified live. "Tier small: Fake" saved `aioven.tiers.small = fake/fake`, and the `pantry` agent then resolved to that model.
 - **T26 OAuth:** verified live up to the device-code screen (github.com/login/device + code, then "waiting for the browser login"), then cancelled. No login was made.
+
+---
+
+# P3–P15 — remaining plan, design (confirmed 2026-10-09: "continue across all the plan")
+
+User-dependent items are prepared, but they need the user's account:
+- **P1 real-model run:** Copilot login or a reset Gemini quota.
+- **P2 benchmark:** paid runs across the harnesses.
+
+The steps for both go in `docs/aioven-validation.md`.
+
+| # | Item | Components |
+|---|---|---|
+| P8 | Lazy session creation | `main.rs`, `app.rs` (`root: Option`), `api.rs` |
+| P3 | `@file` mentions + attachments | `complete.rs` (`@` trigger), `api.rs` `find_files`, `app.rs` (prompt parts) |
+| P4 | Shell mode `!cmd`, `$EDITOR` | `app.rs`, `api.rs` `shell()`, `main.rs` (suspend terminal for the editor) |
+| P5 | Session actions | `api.rs` rename/delete/revert/unrevert, `menu.rs`, `app.rs`, `ui/popups.rs` (rename input) |
+| P6 | Reasoning variant | `api.rs` (variants from `/provider`), `menu.rs`, prompt body `variant` |
+| P7 | Diff viewer | `ui/diff.rs` (pure FileDiff.patch → coloured lines), blueprint file selection, `View::Diff(file)` |
+| P9 | Build / install | `bin/aioven` auto-builds when the binary is missing or stale, `scripts/install-aioven.sh`, docs |
+| P10 | Rust UI tests | `TestBackend` snapshot-style tests for top bar, status line, blueprint, usage, dialogs |
+| P11 | Branding leftovers | README → AIOven; agent prompt files renamed (pantry/taster/thermometer/cookbook.txt) |
+| P12 | Upstream sync | `docs/aioven-upstream.md` + a trial merge of `upstream/dev` in a throwaway worktree (conflict report) |
+| P13 | Push + merge | push `agents-panel`, fast-forward `dev` on the fork (only when everything is green) |
+| P14 | Flaky/env tests | umask test made umask-independent; load-timeout tests left as upstream has them |
+| P15 | Theme picker | `ui/theme.rs` with named palettes (blue default, ocean, mono, light); `aioven.theme` in global config; Ctrl+P |
+
+## Interfaces
+```rust
+// P8: no session until the first prompt
+App.root: Option<String> (None = pending); App::with_root(f) creates the session and runs f in ONE task (no race);
+// send, /command, !shell, --prompt all go through with_root; "+ New session" just resets to pending
+// launcher -s/-c unchanged; quitting without sending leaves no empty session
+
+// P3
+complete::trigger_file(input) -> Option<&str>   // "@query" at the end of the input (after whitespace or line start)
+Api::find_files(query) -> Vec<String>           // GET /find/file?query=&limit=20
+// Tab/Enter on a file completes "@path ". On send, each "@path" that exists becomes a file part
+// {type:"file", mime, url:"file://<abs>", filename}; the text keeps "@path".
+
+// P4
+input "!<cmd>" + send → Api::shell(root, agent, cmd)     // POST /session/{id}/shell
+Ctrl+E → write the input to a temp file, suspend the TUI, run $EDITOR (fallback vi), read the file back
+
+// P5  (Ctrl+P items, act on the current root session)
+Api::rename(id, title) // PATCH /session/{id} {title}       Api::delete(id) // DELETE /session/{id} → new pending session
+Api::revert(id, messageID) // POST …/revert (last user turn) Api::unrevert(id) // POST …/unrevert
+export transcript → ./aioven-<id>.md (reliable); copy → OSC 52 best-effort (tmux set-clipboard external blocks apps)
+
+// P6
+Model variants from GET /provider (`variants` keys per model); Ctrl+P "Reasoning: <variant>"; prompt body "variant"
+
+// P7 ui/diff.rs (pure)
+fn lines(patch: &str) -> Vec<(Kind, String)>   // Kind: Add | Del | Hunk | Context | Header
+// Blueprint focus (Ctrl+↑ twice): ↑↓ select file, Enter opens View::Diff(file) from FileDiff.patch, Esc back
+
+// P15 ui/theme.rs
+struct Palette { text, muted, dim, accent, blue, panel, selected, green, yellow, red, code }
+fn palette(name) -> Palette; Theme::* reads the active palette (set once at start / on change)
+```

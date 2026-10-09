@@ -12,6 +12,7 @@ import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Worktree } from "@/worktree"
 import { AIOvenUsage } from "@/aioven/usage"
+import { SessionSummary } from "@/session/summary"
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Option } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
@@ -41,6 +42,12 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const database = yield* Database.Service
     const aiovenUsage = Effect.fn("ExperimentalHttpApi.aiovenUsage")(function* (ctx: { query: { from?: string } }) {
       return yield* AIOvenUsage.daily(ctx.query.from).pipe(Effect.provideService(Database.Service, database))
+    })
+
+    const summary = yield* SessionSummary.Service
+    const aiovenDiff = Effect.fn("ExperimentalHttpApi.aiovenDiff")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const messages = yield* sessions.messages({ sessionID: ctx.params.sessionID }).pipe(Effect.orDie)
+      return yield* summary.computeDiff({ messages })
     })
 
     const capabilities = Effect.fn("ExperimentalHttpApi.capabilities")(function* () {
@@ -185,6 +192,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     return handlers
       .handle("capabilities", capabilities)
       .handle("aiovenUsage", aiovenUsage)
+      .handle("aiovenDiff", aiovenDiff)
       .handle("console", getConsole)
       .handle("consoleOrgs", listConsoleOrgs)
       .handle("consoleSwitch", switchConsole)

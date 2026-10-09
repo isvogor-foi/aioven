@@ -29,6 +29,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         (planned.clone(), "from recipe".to_string())
     };
     let (by, other) = plan_model::assign(&components, &diffs);
+    // P7: the selected file is highlighted while the blueprint has focus ([ ] select, ⏎ diff)
+    let selected = (app.focus == crate::keys::Focus::Files).then(|| app.selected_file()).flatten();
+    let file_style = |d: &crate::types::FileDiff| {
+        if selected.is_some() && d.file == selected { Theme::text().bg(Theme::c().selected).add_modifier(Modifier::BOLD) } else { Theme::text() }
+    };
     let interfaces = app.recipe.as_deref().map(plan_model::parse_interfaces).unwrap_or_default();
     let links = app.recipe.as_deref().map(plan_model::parse_communication).unwrap_or_default();
     let mut lines = vec![Line::from(Span::styled(source, Theme::muted())), Line::default()];
@@ -38,9 +43,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         }
         let st = if planned.is_empty() { Status::InProgress } else { plan_model::status(c, &todos) };
         let (icon, color) = match st {
-            Status::Completed => ("✓", Theme::GREEN),
-            Status::InProgress => ("⏳", Theme::AQUA),
-            Status::Pending => ("○", Theme::MUTED),
+            Status::Completed => ("✓", Theme::c().green),
+            Status::InProgress => ("⏳", Theme::c().aqua),
+            Status::Pending => ("○", Theme::c().muted),
         };
         lines.push(Line::from(vec![
             Span::styled(format!("{icon} "), Style::default().fg(color)),
@@ -49,18 +54,18 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         ]));
         for (_, sig) in interfaces.iter().filter(|(n, _)| *n == c.name) {
             lines.push(Line::from(vec![
-                Span::styled("    ◇ ", Style::default().fg(Theme::BLUE)),
-                Span::styled(sig.clone(), Style::default().fg(Theme::CODE)),
+                Span::styled("    ◇ ", Style::default().fg(Theme::c().blue)),
+                Span::styled(sig.clone(), Style::default().fg(Theme::c().code)),
             ]));
         }
         if by[i].is_empty() {
-            lines.push(Line::from(Span::styled(format!("    {}", if c.paths.is_empty() { "no files yet".into() } else { c.paths.join(", ") }), Style::default().fg(Theme::DIM))));
+            lines.push(Line::from(Span::styled(format!("    {}", if c.paths.is_empty() { "no files yet".into() } else { c.paths.join(", ") }), Style::default().fg(Theme::c().dim))));
         }
         for d in &by[i] {
             lines.push(Line::from(vec![
-                Span::styled(format!("    {}", d.file.clone().unwrap_or_default()), Theme::text()),
-                Span::styled(format!(" +{}", d.additions), Style::default().fg(Theme::GREEN)),
-                Span::styled(format!(" −{}", d.deletions), Style::default().fg(Theme::RED)),
+                Span::styled(format!("    {}", d.file.clone().unwrap_or_default()), file_style(d)),
+                Span::styled(format!(" +{}", d.additions), Style::default().fg(Theme::c().green)),
+                Span::styled(format!(" −{}", d.deletions), Style::default().fg(Theme::c().red)),
             ]));
         }
     }
@@ -70,7 +75,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         for (from, to, what) in &links {
             lines.push(Line::from(vec![
                 Span::styled(format!("    {from} "), Theme::text()),
-                Span::styled("→ ", Style::default().fg(Theme::AQUA)),
+                Span::styled("→ ", Style::default().fg(Theme::c().aqua)),
                 Span::styled(format!("{to}  "), Theme::text()),
                 Span::styled(what.clone(), Theme::muted()),
             ]));
@@ -81,9 +86,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(Span::styled("OTHER CHANGED FILES", Theme::muted().add_modifier(Modifier::BOLD))));
         for d in other {
             lines.push(Line::from(vec![
-                Span::styled(format!("    {}", d.file.clone().unwrap_or_default()), Theme::text()),
-                Span::styled(format!(" +{}", d.additions), Style::default().fg(Theme::GREEN)),
-                Span::styled(format!(" −{}", d.deletions), Style::default().fg(Theme::RED)),
+                Span::styled(format!("    {}", d.file.clone().unwrap_or_default()), file_style(d)),
+                Span::styled(format!(" +{}", d.additions), Style::default().fg(Theme::c().green)),
+                Span::styled(format!(" −{}", d.deletions), Style::default().fg(Theme::c().red)),
             ]));
         }
     }
@@ -91,7 +96,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(Span::styled("No recipe and no changed files yet.", Theme::muted())));
     }
     let (done, total) = progress(app);
-    let title = if total > 0 { format!("BLUEPRINT {done}/{total}") } else { "BLUEPRINT".into() };
+    let mut title = if total > 0 { format!("BLUEPRINT {done}/{total}") } else { "BLUEPRINT".into() };
+    if selected.is_some() {
+        title.push_str(" · [ ] file · ⏎ diff");
+    }
     let focused = app.focus == crate::keys::Focus::Files;
     let max_scroll = (lines.len() as u16).saturating_sub(area.height.saturating_sub(2));
     f.render_widget(

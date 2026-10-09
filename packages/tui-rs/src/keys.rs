@@ -24,6 +24,7 @@ pub enum Popup {
     Menu,
     Connect,
     Sessions,
+    Rename,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +42,8 @@ pub struct KeyContext {
     pub popup: Popup,
     /// usage page is shown (←/→ switch year)
     pub usage: bool,
+    /// P7: the diff view is open
+    pub diff: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +70,11 @@ pub enum Action {
     OpenMenu,
     Usage,
     Year(i8),
+    /// P4: edit the prompt in $EDITOR
+    Editor,
+    /// P7: select a changed file in the blueprint / open its diff
+    SelectFile(i8),
+    OpenDiff,
     FocusNext,
     FocusInput,
     PopupMove(i8),
@@ -124,7 +132,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
     }
 
     match ctx.popup {
-        Popup::Menu | Popup::Connect | Popup::Sessions => {
+        Popup::Menu | Popup::Connect | Popup::Sessions | Popup::Rename => {
             return match key.code {
                 KeyCode::Up => Some(Action::PopupMove(-1)),
                 KeyCode::Down => Some(Action::PopupMove(1)),
@@ -152,6 +160,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
         KeyCode::Char('p') if ctrl => return Some(Action::OpenMenu),
         KeyCode::Char('g') if ctrl => return Some(Action::Blueprint),
         KeyCode::Char('u') if ctrl => return Some(Action::Usage),
+        KeyCode::Char('e') if ctrl => return Some(Action::Editor),
         KeyCode::Left if ctx.usage => return Some(Action::Year(-1)),
         KeyCode::Right if ctx.usage => return Some(Action::Year(1)),
         KeyCode::Up if ctrl => return Some(Action::FocusNext),
@@ -167,6 +176,10 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
             KeyCode::PageDown => Some(Action::Scroll(pane, 10)),
             KeyCode::Home | KeyCode::Char('g') => Some(Action::ScrollEdge(pane, true)),
             KeyCode::End | KeyCode::Char('G') => Some(Action::ScrollEdge(pane, false)),
+            KeyCode::Char(']') | KeyCode::Char('n') if pane == Pane::Files => Some(Action::SelectFile(1)),
+            KeyCode::Char('[') | KeyCode::Char('p') if pane == Pane::Files => Some(Action::SelectFile(-1)),
+            KeyCode::Enter if pane == Pane::Files && !ctx.diff => Some(Action::OpenDiff),
+            KeyCode::Esc if ctx.diff => Some(Action::BackToChat),
             KeyCode::Esc | KeyCode::Char('i') => Some(Action::FocusInput),
             KeyCode::Tab => Some(Action::FocusNext),
             KeyCode::Char('b') if alt => Some(Action::Blueprint),
@@ -201,7 +214,7 @@ mod tests {
     fn k(code: KeyCode, m: KeyModifiers) -> KeyEvent {
         KeyEvent::new(code, m)
     }
-    const CHAT: KeyContext = KeyContext { modal: Modal::None, in_chat: true, focus: Focus::Input, popup: Popup::None, usage: false };
+    const CHAT: KeyContext = KeyContext { modal: Modal::None, in_chat: true, focus: Focus::Input, popup: Popup::None, usage: false, diff: false };
 
     #[test]
     fn tabs_never_type() {
@@ -247,5 +260,15 @@ mod tests {
         let menu = KeyContext { popup: Popup::Menu, ..CHAT };
         assert!(matches!(map_key(k(KeyCode::Char('m'), KeyModifiers::NONE), &menu), Some(Action::MenuInput(_))));
         assert_eq!(map_key(k(KeyCode::Enter, KeyModifiers::NONE), &menu), Some(Action::PopupAccept));
+    }
+
+    #[test]
+    fn blueprint_file_selection_and_diff() {
+        let files = KeyContext { focus: Focus::Files, ..CHAT };
+        assert_eq!(map_key(k(KeyCode::Char(']'), KeyModifiers::NONE), &files), Some(Action::SelectFile(1)));
+        assert_eq!(map_key(k(KeyCode::Enter, KeyModifiers::NONE), &files), Some(Action::OpenDiff));
+        let diff = KeyContext { focus: Focus::Files, diff: true, in_chat: false, ..CHAT };
+        assert_eq!(map_key(k(KeyCode::Esc, KeyModifiers::NONE), &diff), Some(Action::BackToChat));
+        assert_eq!(map_key(k(KeyCode::Char('e'), KeyModifiers::CONTROL), &CHAT), Some(Action::Editor));
     }
 }

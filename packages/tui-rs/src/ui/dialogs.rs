@@ -17,7 +17,7 @@ fn show(f: &mut Frame, area: Rect, title: &str, lines: Vec<Line>, accent: ratatu
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
-            .block(panel(title).border_style(Style::default().fg(accent)).style(Style::default().bg(Theme::PANEL))),
+            .block(panel(title).border_style(Style::default().fg(accent)).style(Style::default().bg(Theme::c().panel))),
         rect,
     );
 }
@@ -25,7 +25,7 @@ fn show(f: &mut Frame, area: Rect, title: &str, lines: Vec<Line>, accent: ratatu
 fn keys(k: &[(&str, &str)]) -> Line<'static> {
     let mut spans = Vec::new();
     for (key, what) in k {
-        spans.push(Span::styled(format!(" {key} "), Style::default().fg(Theme::TEXT).bg(Theme::SELECTED).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(format!(" {key} "), Style::default().fg(Theme::c().text).bg(Theme::c().selected).add_modifier(Modifier::BOLD)));
         spans.push(Span::styled(format!(" {what}   "), Theme::muted()));
     }
     Line::from(spans)
@@ -39,8 +39,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
                 format!("Stop {name}?")
             }
             Dialog::StopAll(ids) => format!("Stop {} busy agent(s)?", ids.len()),
+            Dialog::Delete(id) => {
+                let title = app.store.sessions.get(id).map(|s| s.title.clone()).unwrap_or_default();
+                show(f, area, "DELETE", vec![Line::from(Span::styled(format!("Delete session “{title}”?"), Theme::text())), Line::default(), keys(&[("y", "delete"), ("n", "keep")])], Theme::c().red);
+                return;
+            }
         };
-        show(f, area, "STOP", vec![Line::from(Span::styled(text, Theme::text())), Line::default(), keys(&[("y", "stop"), ("n", "keep baking")])], Theme::RED);
+        show(f, area, "STOP", vec![Line::from(Span::styled(text, Theme::text())), Line::default(), keys(&[("y", "stop"), ("n", "keep baking")])], Theme::c().red);
         return;
     }
     if let Some(p) = app.pending_permission() {
@@ -50,11 +55,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
             Span::styled(format!("wants permission: {}", p.permission), Theme::text()),
         ])];
         for pat in p.patterns.iter().take(4) {
-            lines.push(Line::from(Span::styled(format!("  {pat}"), Style::default().fg(Theme::CODE))));
+            lines.push(Line::from(Span::styled(format!("  {pat}"), Style::default().fg(Theme::c().code))));
         }
         lines.push(Line::default());
         lines.push(keys(&[("y", "once"), ("a", "always"), ("n", "reject")]));
-        show(f, area, "PERMISSION", lines, Theme::YELLOW);
+        show(f, area, "PERMISSION", lines, Theme::c().yellow);
         return;
     }
     if let Some(q) = app.pending_question() {
@@ -62,7 +67,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         let mut lines = vec![Line::from(Span::styled(info.question.clone(), Theme::text())), Line::default()];
         for (i, o) in info.options.iter().enumerate() {
             let sel = i == app.question_sel;
-            let style = if sel { Style::default().fg(Theme::TEXT).bg(Theme::SELECTED).add_modifier(Modifier::BOLD) } else { Theme::muted() };
+            let style = if sel { Style::default().fg(Theme::c().text).bg(Theme::c().selected).add_modifier(Modifier::BOLD) } else { Theme::muted() };
             lines.push(Line::from(vec![
                 Span::styled(if sel { " ▸ " } else { "   " }, style),
                 Span::styled(o.label.clone(), style),
@@ -71,6 +76,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         }
         lines.push(Line::default());
         lines.push(keys(&[("↑↓", "choose"), ("⏎", "answer"), ("esc", "dismiss")]));
-        show(f, area, if info.header.is_empty() { "QUESTION" } else { &info.header }, lines, Theme::AQUA);
+        show(f, area, if info.header.is_empty() { "QUESTION" } else { &info.header }, lines, Theme::c().aqua);
     }
 }

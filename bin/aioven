@@ -3,12 +3,27 @@
 # The interactive TUI (no subcommand / -s / -c / --attach / project dir) is the Ratatui client;
 # it is started directly here for speed (the CLI default command does the same).
 REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-RS="$REPO/packages/tui-rs/target/release/aioven-tui"
-if [ -x "$RS" ]; then
-  case "$1" in
-    ""|-s|--session|-c|--continue|--attach) exec "$RS" "$@" ;;
-    -*) ;;
-    *) [ -d "$1" ] && exec "$RS" "$@" ;;
-  esac
+CRATE="$REPO/packages/tui-rs"
+RS="$CRATE/target/release/aioven-tui"
+
+# P9: build the Ratatui client when it is missing or older than its sources
+build_tui() {
+  command -v cargo >/dev/null 2>&1 || [ -x "$HOME/.cargo/bin/cargo" ] || return 0
+  PATH="$HOME/.cargo/bin:$PATH"
+  if [ ! -x "$RS" ] || [ -n "$(find "$CRATE/src" "$CRATE/Cargo.toml" "$CRATE/Cargo.lock" -newer "$RS" 2>/dev/null | head -n 1)" ]; then
+    echo "aioven: building the terminal client (first run or sources changed)…" >&2
+    cargo build --release --quiet --manifest-path "$CRATE/Cargo.toml" >&2 || echo "aioven: build failed" >&2
+  fi
+}
+
+tui=0
+case "$1" in
+  ""|-s|--session|-c|--continue|--attach|-m|--model|--agent|--prompt) tui=1 ;;
+  -*) ;;
+  *) [ -d "$1" ] && tui=1 ;;
+esac
+if [ "$tui" = 1 ]; then
+  build_tui
+  [ -x "$RS" ] && exec "$RS" "$@"
 fi
 exec bun run "$REPO/packages/opencode/src/index.ts" "$@"

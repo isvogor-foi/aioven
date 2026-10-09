@@ -37,9 +37,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let pad = (area.width as usize).saturating_sub(left.chars().count() + notice.chars().count() + hints.chars().count() + 3);
     f.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled(left, Style::default().fg(Theme::AQUA)),
+            Span::styled(left, Style::default().fg(Theme::c().aqua)),
             Span::raw("   "),
-            Span::styled(notice, Style::default().fg(Theme::RED)),
+            Span::styled(notice, Style::default().fg(Theme::c().red)),
             Span::raw(" ".repeat(pad)),
             Span::styled(hints, Theme::muted()),
         ])),

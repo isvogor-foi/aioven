@@ -21,12 +21,16 @@ pub enum View {
     Blueprint,
     Skill(String),
     Usage,
+    /// P7: patch of one changed file
+    Diff(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Dialog {
     StopOne(String),
     StopAll(Vec<String>),
+    /// P5: delete the root session
+    Delete(String),
 }
 
 pub enum NetMsg {
@@ -44,14 +48,19 @@ pub enum NetMsg {
     Connected(String),
     Usage(crate::usage::Usage),
     Sessions(Vec<Session>),
+    /// P3: file search results for an "@query"
+    Files { query: String, list: Vec<String> },
+    Variants(std::collections::HashMap<(String, String), Vec<String>>),
+    /// P8: the pending root session was created
+    Created(Session),
     Config(serde_json::Value),
-    SwitchTo(Session),
     Error(String),
 }
 
 pub struct App {
     pub store: Store,
     pub api: Api,
+    /// P8: "" = pending; the session is created on the first prompt/command/shell (see `with_root`)
     pub root: String,
     pub viewing: String,
     pub view: View,
@@ -72,6 +81,18 @@ pub struct App {
     /// T23 sessions popup: (query, selection); list loaded once per open
     pub sessions_popup: Option<(String, usize)>,
     pub session_list: Vec<Session>,
+    /// P3: (query, matches) of the last "@file" search
+    pub file_matches: (String, Vec<String>),
+    /// P6: reasoning variant sent with prompts (None = model default)
+    pub variant: Option<String>,
+    /// P4: set by Ctrl+E; the main loop suspends the TUI and opens $EDITOR with this text
+    pub edit_request: Option<String>,
+    /// P5: rename popup text
+    pub rename: Option<String>,
+    /// P7: index of the selected changed file in the blueprint (Files focus, [ / ])
+    pub file_sel: usize,
+    /// P6: reasoning variants per (provider, model)
+    pub variants: std::collections::HashMap<(String, String), Vec<String>>,
     pub usage: Option<crate::usage::Usage>,
     pub usage_year: i64,
     pub connect: Option<Step>,
@@ -97,13 +118,15 @@ pub fn now_ms() -> i64 {
 }
 
 impl App {
-    pub fn new(api: Api, root: Session, tx: UnboundedSender<NetMsg>) -> App {
+    pub fn new(api: Api, root: Option<Session>, tx: UnboundedSender<NetMsg>) -> App {
         let mut input = TextArea::default();
         input.set_cursor_line_style(ratatui::style::Style::default());
         input.set_placeholder_text("Ask anything…  (Enter = new line, Shift/Alt+Enter = send)");
-        let id = root.id.clone();
+        let id = root.as_ref().map(|s| s.id.clone()).unwrap_or_default();
         let mut store = Store::default();
-        store.sessions.insert(id.clone(), root);
+        if let Some(root) = root {
+            store.sessions.insert(id.clone(), root);
+        }
         App {
             store,
             api,
@@ -126,6 +149,12 @@ impl App {
             menu_open: false,
             sessions_popup: None,
             session_list: Vec::new(),
+            file_matches: (String::new(), Vec::new()),
+            variant: None,
+            edit_request: None,
+            rename: None,
+            file_sel: 0,
+            variants: Default::default(),
             usage: None,
             usage_year: 0,
             connect: None,
@@ -170,18 +199,20 @@ impl App {
         } else {
             Modal::None
         };
-        let popup = if self.sessions_popup.is_some() {
+        let popup = if self.rename.is_some() {
+            Popup::Rename
+        } else if self.sessions_popup.is_some() {
             Popup::Sessions
         } else if self.connect.is_some() {
             Popup::Connect
         } else if self.menu_open {
             Popup::Menu
-        } else if !self.completions().is_empty() {
+        } else if !self.completions().is_empty() || !self.file_completions().is_empty() {
             Popup::Complete
         } else {
             Popup::None
         };
-        KeyContext { modal, in_chat: self.view == View::Chat, focus: self.focus, popup, usage: self.view == View::Usage }
+        KeyContext { modal, in_chat: self.view == View::Chat, focus: self.focus, popup, usage: self.view == View::Usage, diff: matches!(self.view, View::Diff(_)) }
     }
 
     pub fn input_text(&self) -> String {
@@ -200,6 +231,47 @@ impl App {
         }
     }
 
+    /// P3: file candidates while an "@query" is typed at the end of the input.
+    pub fn file_completions(&self) -> Vec<String> {
+        let text = self.input_text();
+        if self.focus != Focus::Input || self.complete_dismissed.as_deref() == Some(text.as_str()) {
+            return vec![];
+        }
+        match complete::trigger_file(&text) {
+            Some(q) if q == self.file_matches.0 => self.file_matches.1.clone(),
+            _ => vec![],
+        }
+    }
+
+    /// P3: search files for the "@query" being typed (results arrive as NetMsg::Files).
+    fn search_files(&mut self) {
+        let text = self.input_text();
+        let Some(q) = complete::trigger_file(&text).map(str::to_string) else { return };
+        if q == self.file_matches.0 && !self.file_matches.1.is_empty() {
+            return;
+        }
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            if let Ok(list) = api.find_files(&q).await {
+                let _ = tx.send(NetMsg::Files { query: q, list });
+            }
+        });
+    }
+
+    /// P3: file parts for every "@path" in the text that exists in the project.
+    fn file_parts(&self, text: &str) -> Vec<serde_json::Value> {
+        let root = std::path::Path::new(self.api.directory());
+        complete::mentions(text)
+            .into_iter()
+            .filter_map(|m| {
+                let abs = if std::path::Path::new(m).is_absolute() { std::path::PathBuf::from(m) } else { root.join(m) };
+                let abs = abs.canonicalize().ok()?;
+                let url = url::Url::from_file_path(&abs).ok()?;
+                Some(serde_json::json!({ "type": "file", "mime": complete::mime(m), "url": url.as_str(), "filename": m }))
+            })
+            .collect()
+    }
+
     pub fn menu_items(&self) -> Vec<(String, Item)> {
         let aioven = self.store.config.get("aioven");
         let terse = aioven.and_then(|a| a.get("terse")).and_then(|v| v.as_str()).unwrap_or("ultra").to_string();
@@ -208,6 +280,8 @@ impl App {
             .and_then(|t| t.as_object())
             .map(|o| o.iter().filter_map(|(k, v)| v.as_str().map(|m| (k.clone(), m.to_string()))).collect())
             .unwrap_or_default();
+        let variants = self.current_variants();
+        let theme = self.theme_name();
         menu::items(&menu::Context {
             agent: &self.agent,
             compact: self.compact,
@@ -215,7 +289,30 @@ impl App {
             current_model: self.model.as_ref(),
             terse: &terse,
             tiers: &tiers,
+            has_session: !self.root.is_empty(),
+            reverted: self.store.sessions.get(&self.root).is_some_and(|s| s.revert.is_some()),
+            variants: &variants,
+            variant: self.variant.as_deref(),
+            theme: &theme,
         })
+    }
+
+    /// P15: theme from the config (`aioven.theme`, default blue).
+    pub fn theme_name(&self) -> String {
+        self.store.config.get("aioven").and_then(|a| a.get("theme")).and_then(|v| v.as_str()).unwrap_or("blue").to_string()
+    }
+
+    /// P7: the changed file selected in the blueprint.
+    pub fn selected_file(&self) -> Option<String> {
+        self.store.diffs.get(&self.root)?.get(self.file_sel)?.file.clone()
+    }
+
+    /// P6: variants of the model prompts go to (chosen model, else the model of the last answer).
+    pub fn current_variants(&self) -> Vec<String> {
+        let model = self.model.clone().or_else(|| {
+            self.store.messages(&self.root).iter().rev().find_map(|m| m.assistant().map(|a| (a.provider_id.clone(), a.model_id.clone())))
+        });
+        model.and_then(|m| self.variants.get(&m).cloned()).unwrap_or_default()
     }
 
     /// T23: sessions matching the popup query (title or id), newest first.
@@ -236,8 +333,8 @@ impl App {
         });
     }
 
-    /// T23: make `s` the root session (row 0 of the popup = new session).
-    pub fn switch_session(&mut self, s: Session) {
+    /// T23/P8: reset the screen to `s`, or to a pending new session (created on the first prompt).
+    pub fn switch_to(&mut self, s: Option<Session>) {
         let config = std::mem::take(&mut self.store.config);
         let agents = std::mem::take(&mut self.store.agents);
         let skills = std::mem::take(&mut self.store.skills);
@@ -245,9 +342,11 @@ impl App {
         self.store.config = config;
         self.store.agents = agents;
         self.store.skills = skills;
-        self.root = s.id.clone();
-        self.viewing = s.id.clone();
-        self.store.sessions.insert(s.id.clone(), s);
+        self.root = s.as_ref().map(|s| s.id.clone()).unwrap_or_default();
+        self.viewing = self.root.clone();
+        if let Some(s) = s {
+            self.store.sessions.insert(s.id.clone(), s);
+        }
         self.view = View::Chat;
         self.chat_scroll = 0;
         self.files_scroll = 0;
@@ -326,6 +425,9 @@ impl App {
             if let Ok(models) = api.models().await {
                 let _ = tx.send(NetMsg::Models(models));
             }
+            if let Ok(v) = api.variants().await {
+                let _ = tx.send(NetMsg::Variants(v));
+            }
         });
     }
 
@@ -337,18 +439,18 @@ impl App {
         self.popup_sel = 0;
     }
 
-    fn set_input(&mut self, text: &str) {
+    pub fn set_input(&mut self, text: &str) {
         self.reset_input();
         self.input.insert_str(text);
     }
 
     fn run_command(&mut self, name: String, args: String) {
-        let (api, root, agent) = (self.api.clone(), self.root.clone(), self.agent.clone());
+        let agent = self.agent.clone();
         self.reset_input();
         self.viewing = self.root.clone();
         self.view = View::Chat;
         self.chat_scroll = 0;
-        self.spawn(async move { api.command(&root, &name, &args, &agent).await });
+        self.with_root(move |api, root| async move { api.command(&root, &name, &args, &agent).await });
     }
 
     pub fn open_connect(&mut self) {
@@ -437,6 +539,58 @@ impl App {
             Item::Connect => self.open_connect(),
             Item::Usage => self.update(Action::Usage),
             Item::Sessions => self.open_sessions(),
+            Item::Rename => {
+                self.rename = Some(self.store.sessions.get(&self.root).map(|s| s.title.clone()).unwrap_or_default());
+            }
+            Item::Delete => self.dialog = Some(Dialog::Delete(self.root.clone())),
+            Item::Undo => {
+                // last user turn that is still visible
+                let last = derive::visible(&self.store, &self.root)
+                    .iter()
+                    .rev()
+                    .find(|m| matches!(m, crate::types::Message::User(_)))
+                    .map(|m| m.id().to_string());
+                let Some(msg) = last else {
+                    self.notice = Some("nothing to undo".into());
+                    return;
+                };
+                // put the undone prompt back in the input, like an editor's undo
+                let text: String = self
+                    .store
+                    .parts(&msg)
+                    .iter()
+                    .filter_map(|p| match &p.kind {
+                        crate::types::PartKind::Text { text } => Some(text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                self.set_input(&text);
+                let (api, id) = (self.api.clone(), self.root.clone());
+                self.spawn(async move { api.revert(&id, &msg).await });
+            }
+            Item::Redo => {
+                let (api, id) = (self.api.clone(), self.root.clone());
+                self.reset_input();
+                self.spawn(async move { api.unrevert(&id).await });
+            }
+            Item::Export => {
+                let s = self.store.sessions.get(&self.root);
+                let name = s.map(|s| if s.slug.is_empty() { s.id.clone() } else { s.slug.clone() }).unwrap_or_default();
+                let path = std::path::Path::new(self.api.directory()).join(format!("aioven-{name}.md"));
+                self.notice = Some(match std::fs::write(&path, derive::transcript(&self.store, &self.root)) {
+                    Ok(()) => format!("exported → {}", path.display()),
+                    Err(e) => format!("export failed: {e}"),
+                });
+            }
+            Item::Theme(name) => {
+                crate::ui::Theme::set(&name);
+                self.save_global(serde_json::json!({ "aioven": { "theme": name } }), format!("theme: {name}"));
+            }
+            Item::Variant(v) => {
+                self.notice = Some(format!("reasoning: {}", v.as_deref().unwrap_or("default")));
+                self.variant = v;
+            }
             Item::Terse(level) => {
                 self.save_global(serde_json::json!({ "aioven": { "terse": level } }), format!("caveman level: {level} (next prompt)"))
             }
@@ -472,7 +626,7 @@ impl App {
     // ---- network work ---------------------------------------------------------------------------
 
     pub fn ensure_loaded(&mut self, session: &str) {
-        if !self.loaded.insert(session.to_string()) {
+        if session.is_empty() || !self.loaded.insert(session.to_string()) {
             return;
         }
         let (api, tx, id) = (self.api.clone(), self.tx.clone(), session.to_string());
@@ -498,6 +652,9 @@ impl App {
     }
 
     pub fn load_children(&mut self) {
+        if self.root.is_empty() {
+            return;
+        }
         let (api, tx, root) = (self.api.clone(), self.tx.clone(), self.root.clone());
         tokio::spawn(async move {
             if let Ok(kids) = api.children(&root).await {
@@ -514,6 +671,35 @@ impl App {
         let (api, tx) = (self.api.clone(), self.tx.clone());
         tokio::spawn(async move {
             let _ = tx.send(NetMsg::Recipe(api.read_file(&path).await.ok().flatten()));
+        });
+    }
+
+    /// P8: run `work` against the root session, creating it first (in the same task) when pending.
+    fn with_root<W, F>(&self, work: W)
+    where
+        W: FnOnce(Api, String) -> F + Send + 'static,
+        F: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+    {
+        let (api, tx, root) = (self.api.clone(), self.tx.clone(), self.root.clone());
+        tokio::spawn(async move {
+            let root = if root.is_empty() {
+                match api.session_create().await {
+                    Ok(s) => {
+                        let id = s.id.clone();
+                        let _ = tx.send(NetMsg::Created(s));
+                        id
+                    }
+                    Err(e) => {
+                        let _ = tx.send(NetMsg::Error(format!("could not create a session: {e:#}")));
+                        return;
+                    }
+                }
+            } else {
+                root
+            };
+            if let Err(e) = work(api, root).await {
+                let _ = tx.send(NetMsg::Error(format!("{e:#}")));
+            }
         });
     }
 
@@ -562,8 +748,20 @@ impl App {
                 }
             }
             NetMsg::Sessions(list) => self.session_list = list,
-            NetMsg::Config(cfg) => self.store.config = cfg,
-            NetMsg::SwitchTo(s) => self.switch_session(s),
+            NetMsg::Files { query, list } => self.file_matches = (query, list),
+            NetMsg::Variants(v) => self.variants = v,
+            NetMsg::Config(cfg) => {
+                self.store.config = cfg;
+                crate::ui::Theme::set(&self.theme_name());
+            }
+            NetMsg::Created(s) => {
+                if self.root.is_empty() {
+                    self.loaded.insert(s.id.clone());
+                    self.root = s.id.clone();
+                    self.viewing = s.id.clone();
+                    self.store.sessions.insert(s.id.clone(), s);
+                }
+            }
             NetMsg::Usage(u) => {
                 if self.usage_year == 0 {
                     self.usage_year = u.days.last().and_then(|d| crate::usage::parse(&d.day)).map(|(y, _, _)| y).unwrap_or(1970);
@@ -591,12 +789,29 @@ impl App {
 
     pub fn on_event(&mut self, event: Event) {
         let todos_changed = matches!(&event, Event::TodoUpdated { session_id, .. } if *session_id == self.root);
+        // the server's live diff event is empty (summary resets it); re-read the diff after edits and when idle
+        let diff_changed = !self.root.is_empty()
+            && match &event {
+                Event::SessionStatus { session_id, status } => {
+                    *session_id == self.root && matches!(status, crate::types::SessionStatus::Idle)
+                }
+                Event::PartUpdated(p) => matches!(&p.kind, PartKind::Patch {}),
+                _ => false,
+            };
         if let Event::PartDelta { message_id, delta, .. } = &event {
             *self.out_chars.entry(message_id.clone()).or_default() += delta.chars().count();
         }
         store::apply(&mut self.store, event);
         if todos_changed {
             self.refresh_recipe();
+        }
+        if diff_changed {
+            let (api, tx, root) = (self.api.clone(), self.tx.clone(), self.root.clone());
+            tokio::spawn(async move {
+                if let Ok(diff) = api.diff(&root).await {
+                    let _ = tx.send(NetMsg::Diff { session: root, diff });
+                }
+            });
         }
         self.follow_children();
     }
@@ -656,6 +871,14 @@ impl App {
                     self.reset_input();
                     return self.open_connect();
                 }
+                if let Some(cmd) = text.trim().strip_prefix('!').map(str::trim).filter(|c| !c.is_empty()) {
+                    let (cmd, agent, model) = (cmd.to_string(), self.agent.clone(), self.model.clone());
+                    self.reset_input();
+                    self.viewing = self.root.clone();
+                    self.view = View::Chat;
+                    self.chat_scroll = 0;
+                    return self.with_root(move |api, root| async move { api.shell(&root, &agent, &cmd, model).await });
+                }
                 if let Some((name, args)) = complete::split(&text) {
                     if self.commands.iter().any(|c| c.name == name) {
                         let (name, args) = (name.to_string(), args.to_string());
@@ -666,8 +889,9 @@ impl App {
                 self.viewing = self.root.clone();
                 self.view = View::Chat;
                 self.chat_scroll = 0;
-                let (api, root, agent, model) = (self.api.clone(), self.root.clone(), self.agent.clone(), self.model.clone());
-                self.spawn(async move { api.prompt(&root, &text, &agent, model).await });
+                let (agent, model, variant) = (self.agent.clone(), self.model.clone(), self.variant.clone());
+                let files = self.file_parts(&text);
+                self.with_root(move |api, root| async move { api.prompt(&root, &text, &agent, model, variant, files).await });
             }
             Action::StopAsk => {
                 if derive::wait_of(&self.store, &self.viewing).is_busy() {
@@ -697,6 +921,12 @@ impl App {
                 let ids = match dialog {
                     Some(Dialog::StopOne(id)) => vec![id],
                     Some(Dialog::StopAll(ids)) => ids,
+                    Some(Dialog::Delete(id)) => {
+                        let api = self.api.clone();
+                        self.switch_to(None);
+                        self.notice = Some("session deleted".into());
+                        return self.spawn(async move { api.delete(&id).await });
+                    }
                     None => vec![],
                 };
                 let api = self.api.clone();
@@ -765,6 +995,7 @@ impl App {
                 });
             }
             Action::Year(d) => self.usage_year += d as i64,
+            Action::Editor => self.edit_request = Some(self.input_text()),
             Action::OpenMenu => {
                 self.menu_open = true;
                 self.menu_query.clear();
@@ -781,10 +1012,44 @@ impl App {
                 }
             }
             Action::FocusInput => self.focus = Focus::Input,
+            Action::SelectFile(d) => {
+                let n = self.store.diffs.get(&self.root).map(Vec::len).unwrap_or(0);
+                if n > 0 {
+                    self.file_sel = (self.file_sel as i64 + d as i64).rem_euclid(n as i64) as usize;
+                }
+            }
+            Action::OpenDiff => {
+                if let Some(file) = self.selected_file() {
+                    self.view = View::Diff(file);
+                    self.files_scroll = 0;
+                    self.focus = Focus::Files;
+                }
+            }
             Action::Scroll(Pane::Chat, d) => self.chat_scroll = (self.chat_scroll as i32 - d as i32).clamp(0, 10_000) as u16,
             Action::Scroll(Pane::Files, d) => self.files_scroll = (self.files_scroll as i32 + d as i32).clamp(0, 10_000) as u16,
             Action::ScrollEdge(Pane::Chat, top) => self.chat_scroll = if top { 10_000 } else { 0 },
             Action::ScrollEdge(Pane::Files, top) => self.files_scroll = if top { 0 } else { 10_000 },
+            Action::PopupAccept if self.rename.is_some() => {
+                let title = self.rename.take().unwrap_or_default();
+                let (api, id) = (self.api.clone(), self.root.clone());
+                if !title.trim().is_empty() && !id.is_empty() {
+                    self.spawn(async move { api.rename(&id, title.trim()).await });
+                }
+            }
+            Action::PopupClose if self.rename.is_some() => self.rename = None,
+            Action::MenuInput(key) if self.rename.is_some() => {
+                use crossterm::event::KeyCode;
+                if let Some(t) = self.rename.as_mut() {
+                    match key.code {
+                        KeyCode::Char(c) => t.push(c),
+                        KeyCode::Backspace => {
+                            t.pop();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Action::PopupMove(_) if self.rename.is_some() => {}
             Action::PopupMove(d) if self.sessions_popup.is_some() => {
                 let n = self.sessions_visible().len() as i64 + 1; // row 0 = new session
                 if let Some((_, sel)) = self.sessions_popup.as_mut() {
@@ -795,18 +1060,7 @@ impl App {
                 let sel = self.sessions_popup.as_ref().map(|(_, s)| *s).unwrap_or(0);
                 let picked = if sel == 0 { None } else { self.sessions_visible().get(sel - 1).map(|s| (*s).clone()) };
                 self.sessions_popup = None;
-                match picked {
-                    Some(s) => self.switch_session(s),
-                    None => {
-                        let (api, tx) = (self.api.clone(), self.tx.clone());
-                        tokio::spawn(async move {
-                            let _ = tx.send(match api.session_create().await {
-                                Ok(s) => NetMsg::SwitchTo(s),
-                                Err(e) => NetMsg::Error(format!("{e:#}")),
-                            });
-                        });
-                    }
-                }
+                self.switch_to(picked);
             }
             Action::PopupClose if self.sessions_popup.is_some() => self.sessions_popup = None,
             Action::MenuInput(key) if self.sessions_popup.is_some() => {
@@ -834,9 +1088,16 @@ impl App {
                 }
             }
             Action::PopupMove(d) => {
-                let n = if self.menu_open { self.menu_visible().len() } else { self.completions().len() };
+                let files = self.file_completions().len();
+                let n = if self.menu_open { self.menu_visible().len() } else if files > 0 { files } else { self.completions().len() };
                 if n > 0 {
                     self.popup_sel = (self.popup_sel as i64 + d as i64).rem_euclid(n as i64) as usize;
+                }
+            }
+            Action::PopupComplete | Action::PopupAccept if !self.menu_open && !self.file_completions().is_empty() => {
+                if let Some(path) = self.file_completions().get(self.popup_sel).cloned() {
+                    let text = complete::insert_file(&self.input_text(), &path);
+                    self.set_input(&text);
                 }
             }
             Action::PopupComplete => {
@@ -894,6 +1155,7 @@ impl App {
             Action::Input(key) => {
                 self.input.input(key);
                 self.popup_sel = 0;
+                self.search_files();
             }
         }
     }

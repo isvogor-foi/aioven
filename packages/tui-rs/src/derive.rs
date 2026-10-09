@@ -79,6 +79,41 @@ pub fn task_sessions(store: &Store, session: &str) -> Vec<String> {
 }
 
 /// Tab order: index 0 = root, 1..=9 = direct children by creation; busy children win when there are more.
+/// P5: messages shown for a session (an undo hides the reverted turn and everything after it).
+pub fn visible<'a>(store: &'a Store, session: &str) -> &'a [crate::types::Message] {
+    let all = store.messages(session);
+    let cut = store
+        .sessions
+        .get(session)
+        .and_then(|s| s.revert.as_ref())
+        .and_then(|r| all.iter().position(|m| m.id() == r.message_id));
+    &all[..cut.unwrap_or(all.len())]
+}
+
+/// P5: transcript of a session as markdown (user and agent text, tool names).
+pub fn transcript(store: &Store, session: &str) -> String {
+    let title = store.sessions.get(session).map(|s| s.title.clone()).unwrap_or_default();
+    let mut out = format!("# {title}\n");
+    for m in visible(store, session) {
+        let who = match m {
+            crate::types::Message::User(_) => "you".to_string(),
+            _ => m.assistant().map(|a| a.agent.clone()).unwrap_or_else(|| "agent".into()),
+        };
+        out.push_str(&format!("\n## {who}\n\n"));
+        for p in store.parts(m.id()) {
+            match &p.kind {
+                crate::types::PartKind::Text { text } if !text.trim().is_empty() => {
+                    out.push_str(text.trim_end());
+                    out.push_str("\n\n");
+                }
+                crate::types::PartKind::Tool { tool, .. } => out.push_str(&format!("- tool: `{tool}`\n")),
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 pub fn agents(store: &Store, session: &str) -> Vec<String> {
     let root_id = root(store, session);
     let mut kids: Vec<&Session> =

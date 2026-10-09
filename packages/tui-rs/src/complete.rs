@@ -26,6 +26,43 @@ pub fn matches<'a>(entries: &'a [Entry], query: &str) -> Vec<&'a Entry> {
     prefix
 }
 
+/// P3: the "@query" being typed at the end of the input (after whitespace or at the start).
+pub fn trigger_file(input: &str) -> Option<&str> {
+    let token = input.rsplit(char::is_whitespace).next()?;
+    token.strip_prefix('@')
+}
+
+/// P3: every "@path" mentioned in the text (trailing punctuation dropped).
+pub fn mentions(input: &str) -> Vec<&str> {
+    let mut out: Vec<&str> = input
+        .split_whitespace()
+        .filter_map(|t| t.strip_prefix('@'))
+        .map(|t| t.trim_end_matches(|c: char| ",.;:!?)\"'".contains(c)))
+        .filter(|t| !t.is_empty())
+        .collect();
+    out.dedup();
+    out
+}
+
+/// P3: mime type the server expects for a file part (text files are read by the server's read tool).
+pub fn mime(path: &str) -> &'static str {
+    let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "pdf" => "application/pdf",
+        _ => "text/plain",
+    }
+}
+
+/// P3: replace the "@query" at the end of the input with "@path ".
+pub fn insert_file(input: &str, path: &str) -> String {
+    let token = input.rsplit(char::is_whitespace).next().unwrap_or("");
+    format!("{}@{path} ", &input[..input.len() - token.len()])
+}
+
 /// Split "/name rest of text" into (name, arguments).
 pub fn split(input: &str) -> Option<(&str, &str)> {
     let rest = input.strip_prefix('/').or_else(|| input.strip_prefix('\\'))?;
@@ -56,6 +93,17 @@ mod tests {
         let names: Vec<&str> = matches(&list, "p").iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["pdf", "pptx", "prompt", "deep-research"]);
         assert_eq!(matches(&list, "").len(), 5);
+    }
+
+    #[test]
+    fn file_mentions() {
+        assert_eq!(trigger_file("look at @src/ma"), Some("src/ma"));
+        assert_eq!(trigger_file("@"), Some(""));
+        assert_eq!(trigger_file("look at @src/main.rs now"), None);
+        assert_eq!(trigger_file("mail a@b"), None);
+        assert_eq!(mentions("see @a.rs, and @img.png."), ["a.rs", "img.png"]);
+        assert_eq!((mime("x.PNG"), mime("y.rs")), ("image/png", "text/plain"));
+        assert_eq!(insert_file("fix @sr", "src/main.rs"), "fix @src/main.rs ");
     }
 
     #[test]

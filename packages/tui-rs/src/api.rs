@@ -40,6 +40,16 @@ impl Api {
         Ok(if text.trim().is_empty() { Value::Null } else { serde_json::from_str(&text).unwrap_or(Value::Null) })
     }
 
+    /// P3: project files matching `query` (fuzzy, server side).
+    pub async fn find_files(&self, query: &str) -> Result<Vec<String>> {
+        let mut url = self.url("/find/file");
+        url.query_pairs_mut().append_pair("query", query).append_pair("limit", "12");
+        let res = self.http.get(url).send().await.context("GET /find/file")?.error_for_status()?;
+        Ok(res.json().await?)
+    }
+    pub fn directory(&self) -> &str {
+        &self.directory
+    }
     pub async fn agents(&self) -> Result<Vec<Agent>> {
         self.get("/agent").await
     }
@@ -71,18 +81,41 @@ impl Api {
     pub async fn todos(&self, id: &str) -> Result<Vec<Todo>> {
         self.get(&format!("/session/{id}/todo")).await
     }
+    /// Whole-session diff (AIOven endpoint; upstream /session/{id}/diff only diffs one turn).
     pub async fn diff(&self, id: &str) -> Result<Vec<FileDiff>> {
-        self.get(&format!("/session/{id}/diff")).await
+        self.get(&format!("/experimental/aioven/session/{id}/diff")).await
     }
     pub async fn status(&self) -> Result<HashMap<String, SessionStatus>> {
         self.get("/session/status").await
     }
-    pub async fn prompt(&self, id: &str, text: &str, agent: &str, model: Option<(String, String)>) -> Result<()> {
-        let mut body = json!({ "agent": agent, "parts": [{ "type": "text", "text": text }] });
+    /// `files`: P3 attachments (file parts); `variant`: P6 reasoning variant of the model.
+    pub async fn prompt(
+        &self,
+        id: &str,
+        text: &str,
+        agent: &str,
+        model: Option<(String, String)>,
+        variant: Option<String>,
+        files: Vec<Value>,
+    ) -> Result<()> {
+        let mut parts = vec![json!({ "type": "text", "text": text })];
+        parts.extend(files);
+        let mut body = json!({ "agent": agent, "parts": parts });
         if let Some((provider, model)) = model {
             body["model"] = json!({ "providerID": provider, "modelID": model });
         }
+        if let Some(variant) = variant {
+            body["variant"] = json!(variant);
+        }
         self.post(&format!("/session/{id}/prompt_async"), body).await.map(|_| ())
+    }
+    /// P4: run a shell command in the session (output becomes part of the transcript).
+    pub async fn shell(&self, id: &str, agent: &str, command: &str, model: Option<(String, String)>) -> Result<()> {
+        let mut body = json!({ "agent": agent, "command": command });
+        if let Some((provider, model)) = model {
+            body["model"] = json!({ "providerID": provider, "modelID": model });
+        }
+        self.post(&format!("/session/{id}/shell"), body).await.map(|_| ())
     }
     /// Move running foreground subagents of a session to the background.
     pub async fn background(&self, id: &str) -> Result<()> {
@@ -110,6 +143,36 @@ impl Api {
                 })
             })
             .collect())
+    }
+    /// P6: reasoning variants per (provider, model) of connected providers.
+    pub async fn variants(&self) -> Result<HashMap<(String, String), Vec<String>>> {
+        let list: ProviderList = self.get("/provider").await?;
+        Ok(list
+            .all
+            .into_iter()
+            .filter(|p| list.connected.contains(&p.id))
+            .flat_map(|p| {
+                let pid = p.id.clone();
+                p.models.into_iter().map(move |(id, m)| ((pid.clone(), id), m.variants.into_keys().collect()))
+            })
+            .collect())
+    }
+    /// P5 session actions
+    pub async fn rename(&self, id: &str, title: &str) -> Result<()> {
+        let res = self.http.patch(self.url(&format!("/session/{id}"))).json(&json!({ "title": title })).send().await?;
+        res.error_for_status().context("rename session")?;
+        Ok(())
+    }
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        let res = self.http.delete(self.url(&format!("/session/{id}"))).send().await?;
+        res.error_for_status().context("delete session")?;
+        Ok(())
+    }
+    pub async fn revert(&self, id: &str, message_id: &str) -> Result<()> {
+        self.post(&format!("/session/{id}/revert"), json!({ "messageID": message_id })).await.map(|_| ())
+    }
+    pub async fn unrevert(&self, id: &str) -> Result<()> {
+        self.post(&format!("/session/{id}/unrevert"), json!({})).await.map(|_| ())
     }
     /// Permission requests pending before the client connected.
     pub async fn permissions(&self) -> Result<Vec<PermissionRequest>> {

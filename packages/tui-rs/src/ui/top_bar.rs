@@ -50,11 +50,11 @@ pub fn fit_tabs(tabs: &[Tab], width: usize) -> Vec<Tab> {
 
 fn color(w: &Wait) -> ratatui::style::Color {
     match w {
-        Wait::Permission(_) | Wait::Question => Theme::YELLOW,
-        Wait::Error(_) | Wait::Retry { .. } => Theme::RED,
-        Wait::Done => Theme::GREEN,
-        w if w.is_busy() => Theme::AQUA,
-        _ => Theme::MUTED,
+        Wait::Permission(_) | Wait::Question => Theme::c().yellow,
+        Wait::Error(_) | Wait::Retry { .. } => Theme::c().red,
+        Wait::Done => Theme::c().green,
+        w if w.is_busy() => Theme::c().aqua,
+        _ => Theme::c().muted,
     }
 }
 
@@ -94,37 +94,37 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     for t in &fitted {
         let id = &ids[t.index];
         let active = app.view == View::Chat && *id == app.viewing;
-        let base = if active { Style::default().bg(Theme::SELECTED) } else { Style::default() };
-        spans.push(Span::styled(format!(" {}", t.index), base.fg(Theme::MUTED)));
+        let base = if active { Style::default().bg(Theme::c().selected) } else { Style::default() };
+        spans.push(Span::styled(format!(" {}", t.index), base.fg(Theme::c().muted)));
         if !t.name.is_empty() {
-            let s = if active { base.fg(Theme::TEXT).add_modifier(Modifier::BOLD) } else { base.fg(Theme::MUTED) };
+            let s = if active { base.fg(Theme::c().text).add_modifier(Modifier::BOLD) } else { base.fg(Theme::c().muted) };
             spans.push(Span::styled(format!(" {}", t.name), s));
         }
         if !t.status.is_empty() {
             spans.push(Span::styled(format!(" {}", t.status), base.fg(color(&app.wait(id)))));
         }
         if !t.tokens.is_empty() {
-            spans.push(Span::styled(format!(" {}", t.tokens), base.fg(Theme::DIM)));
+            spans.push(Span::styled(format!(" {}", t.tokens), base.fg(Theme::c().dim)));
         }
         spans.push(Span::styled(" ", base));
-        spans.push(Span::styled("│", Style::default().fg(Theme::DIM)));
+        spans.push(Span::styled("│", Style::default().fg(Theme::c().dim)));
     }
     let used: usize = spans.iter().map(|s| s.content.chars().count()).sum();
     if !skills_text.is_empty() {
         let active = matches!(app.view, View::Skill(_));
-        spans.push(Span::styled(skills_text.clone(), Style::default().fg(if active { Theme::AQUA } else { Theme::MUTED })));
+        spans.push(Span::styled(skills_text.clone(), Style::default().fg(if active { Theme::c().aqua } else { Theme::c().muted })));
     }
     let pad = (area.width as usize).saturating_sub(used + skills_text.chars().count() + blueprint.chars().count() + usage_tab.len() - 1);
     spans.push(Span::raw(" ".repeat(pad)));
     let usage_active = app.view == View::Usage;
     spans.push(Span::styled(
         usage_tab,
-        if usage_active { Style::default().bg(Theme::SELECTED).fg(Theme::TEXT).add_modifier(Modifier::BOLD) } else { Style::default().fg(Theme::BLUE) },
+        if usage_active { Style::default().bg(Theme::c().selected).fg(Theme::c().text).add_modifier(Modifier::BOLD) } else { Style::default().fg(Theme::c().blue) },
     ));
     let bp_active = app.view == View::Blueprint;
     spans.push(Span::styled(
         blueprint,
-        if bp_active { Style::default().bg(Theme::SELECTED).fg(Theme::TEXT).add_modifier(Modifier::BOLD) } else { Style::default().fg(Theme::BLUE) },
+        if bp_active { Style::default().bg(Theme::c().selected).fg(Theme::c().text).add_modifier(Modifier::BOLD) } else { Style::default().fg(Theme::c().blue) },
     ));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }

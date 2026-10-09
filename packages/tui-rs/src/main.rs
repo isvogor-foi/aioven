@@ -91,9 +91,10 @@ async fn main() -> Result<()> {
 
     let latest = if args.continue_last && args.session.is_none() { api.latest_session().await.ok().flatten() } else { None };
     let root = match (&args.session, latest) {
-        (Some(id), _) => api.session(id).await.with_context(|| format!("session {id} not found"))?,
-        (None, Some(s)) => s,
-        (None, None) => api.session_create().await.context("could not create a session")?,
+        (Some(id), _) => Some(api.session(id).await.with_context(|| format!("session {id} not found"))?),
+        (None, Some(s)) => Some(s),
+        // P8: no session until the first prompt
+        (None, None) => None,
     };
     let (net_tx, mut net_rx) = mpsc::unbounded_channel::<NetMsg>();
     let mut app = App::new(api.clone(), root, net_tx);
@@ -104,6 +105,7 @@ async fn main() -> Result<()> {
     app.store.agents = api.agents().await.unwrap_or_default();
     app.store.skills = api.skills().await.unwrap_or_default();
     app.store.config = api.config().await.unwrap_or_default();
+    ui::Theme::set(&app.theme_name());
     app.store.status = api.status().await.unwrap_or_default();
     let root_id = app.root.clone();
     app.ensure_loaded(&root_id);
@@ -117,34 +119,10 @@ async fn main() -> Result<()> {
         app.update(keys::Action::Send);
     }
 
-    enable_raw_mode()?;
-    let mut out = stdout();
-    execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
-    // kitty protocol: lets Shift+Enter and Ctrl+digits be told apart (ignored by terminals without it)
-    let enhanced = execute!(
-        out,
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
-    )
-    .is_ok();
-    // xterm modifyOtherKeys: tmux (extended-keys on) only reports Shift+Enter etc. when the app asks this way
-    {
-        use std::io::Write;
-        let _ = out.write_all(b"\x1b[>4;2m");
-        let _ = out.flush();
-    }
-    let mut terminal = Terminal::new(CrosstermBackend::new(out))?;
-    let result = run(&mut terminal, &mut app, &mut net_rx, &mut stream).await;
-
-    if enhanced {
-        let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
-    }
-    {
-        use std::io::Write;
-        let _ = terminal.backend_mut().write_all(b"\x1b[>4;0m");
-        let _ = terminal.backend_mut().flush();
-    }
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), DisableMouseCapture, LeaveAlternateScreen)?;
+    let enhanced = enter_tui()?;
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    let result = run(&mut terminal, &mut app, &mut net_rx, &mut stream, enhanced).await;
+    leave_tui(enhanced);
     terminal.show_cursor()?;
     drop(server);
 
@@ -155,10 +133,52 @@ async fn main() -> Result<()> {
         println!("{line}");
     }
     println!();
-    println!("  \x1b[90mSession   \x1b[0m\x1b[1m{title}\x1b[0m");
-    println!("  \x1b[90mContinue  \x1b[0m\x1b[1m{} -s {}\x1b[0m", brand::COMMAND, app.root);
+    if !app.root.is_empty() {
+        println!("  \x1b[90mSession   \x1b[0m\x1b[1m{title}\x1b[0m");
+        println!("  \x1b[90mContinue  \x1b[0m\x1b[1m{} -s {}\x1b[0m", brand::COMMAND, app.root);
+    }
     println!();
     result
+}
+
+/// Raw mode, alternate screen, mouse, kitty keys and modifyOtherKeys. Returns whether kitty keys were enabled.
+fn enter_tui() -> Result<bool> {
+    use std::io::Write;
+    enable_raw_mode()?;
+    let mut out = stdout();
+    execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
+    // kitty protocol: lets Shift+Enter and Ctrl+digits be told apart (ignored by terminals without it)
+    let enhanced =
+        execute!(out, PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)).is_ok();
+    // xterm modifyOtherKeys: tmux (extended-keys on) only reports Shift+Enter etc. when the app asks this way
+    let _ = out.write_all(b"\x1b[>4;2m");
+    let _ = out.flush();
+    Ok(enhanced)
+}
+
+/// Undo everything `enter_tui` set.
+fn leave_tui(enhanced: bool) {
+    use std::io::Write;
+    let mut out = stdout();
+    if enhanced {
+        let _ = execute!(out, PopKeyboardEnhancementFlags);
+    }
+    let _ = out.write_all(b"\x1b[>4;0m");
+    let _ = disable_raw_mode();
+    let _ = execute!(out, DisableMouseCapture, LeaveAlternateScreen, crossterm::cursor::Show);
+    let _ = out.flush();
+}
+
+/// P4: edit `text` in $VISUAL/$EDITOR (fallback vi); None when the editor failed.
+fn edit_in_editor(text: &str) -> Option<String> {
+    let path = std::env::temp_dir().join(format!("aioven-prompt-{}.md", std::process::id()));
+    std::fs::write(&path, text).ok()?;
+    let editor = std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")).unwrap_or_else(|_| "vi".into());
+    let mut parts = editor.split_whitespace();
+    let status = std::process::Command::new(parts.next()?).args(parts).arg(&path).status().ok()?;
+    let out = std::fs::read_to_string(&path).ok();
+    let _ = std::fs::remove_file(&path);
+    status.success().then_some(out?.trim_end().to_string())
 }
 
 async fn run(
@@ -166,6 +186,7 @@ async fn run(
     app: &mut App,
     net_rx: &mut mpsc::UnboundedReceiver<NetMsg>,
     stream: &mut mpsc::UnboundedReceiver<StreamMsg>,
+    enhanced: bool,
 ) -> Result<()> {
     let mut keys = EventStream::new();
     // 100 ms ticks keep spinners and timers live
@@ -212,6 +233,19 @@ async fn run(
         }
         if app.quit {
             return Ok(());
+        }
+        if let Some(text) = app.edit_request.take() {
+            // stop reading keys first, or the event reader steals the editor's input
+            drop(keys);
+            leave_tui(enhanced);
+            let edited = edit_in_editor(&text);
+            enter_tui()?;
+            terminal.clear()?;
+            keys = EventStream::new();
+            match edited {
+                Some(t) => app.set_input(&t),
+                None => app.notice = Some("editor failed (set $EDITOR)".into()),
+            }
         }
     }
 }

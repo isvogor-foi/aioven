@@ -2,7 +2,9 @@
 
 AIOven is a fork of OpenCode that works more like Claude Code: one main agent writes the code, small read-only subagents help it, and a right-hand panel shows what every agent is doing and how many tokens it has used.
 
-Run it with `aioven [project-path]` (or `bun dev` inside this repo).
+Install from this checkout with `bin/aioven-install` (needs bun and Rust). It installs the dependencies, builds the terminal client and links `~/.local/bin/aioven`. Then run `aioven [project-path]`. The launcher rebuilds the terminal client by itself when its sources change.
+
+A new session is created only when you send the first prompt, so starting and quitting leaves nothing behind.
 
 ## Screen (Ratatui client, default)
 
@@ -25,10 +27,14 @@ Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|rec
 | `/` or `\` at line start | skills (✦) and commands; ↑↓ choose, Tab complete, Enter run, Esc close |
 | `/connect` | log in to a model provider (API key or browser login) |
 | `/sessions` | open a past session or start a new one (also in Ctrl+P) |
+| `@path` | mention a file: a file picker opens while you type; mentioned files (and images) are attached to the prompt |
+| `!command` + send | run a shell command in the session; its output becomes part of the conversation |
+| Ctrl+E | edit the prompt in `$VISUAL`/`$EDITOR` (fallback vi) |
 | Ctrl+U | usage page: heat map of tokens per day for a year (←/→), monthly bars, totals since install |
-| Ctrl+P | menu: sessions, connect provider, usage stats, caveman level, model per tier, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
+| Ctrl+P | menu: sessions, session rename / undo last turn / redo / export / delete, reasoning level, theme, connect provider, usage stats, caveman level, model per tier, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
 | Ctrl+B | move running foreground subagents to the background (inside tmux press Ctrl+B twice, or use the Ctrl+P menu) |
 | Ctrl+↑ | focus chat, then blueprint (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
+| `[` `]` in the focused blueprint | select a changed file; Enter shows its diff (Esc back) |
 | Mouse wheel | scroll chat or blueprint under the pointer |
 | Ctrl+G (or Alt+B) | full-height blueprint (Esc returns); tmux uses Ctrl+B as its prefix |
 | Alt+S | next skill tab |

@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# P9: install AIOven from this checkout: dependencies, terminal client, `aioven` on PATH.
+set -e
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+command -v bun >/dev/null 2>&1 || { echo "needs bun: https://bun.sh" >&2; exit 1; }
+PATH="$HOME/.cargo/bin:$PATH"
+command -v cargo >/dev/null 2>&1 || { echo "needs Rust (cargo): https://rustup.rs" >&2; exit 1; }
+echo "• installing JS dependencies"; (cd "$REPO" && bun install --silent)
+echo "• building the terminal client"; cargo build --release --quiet --manifest-path "$REPO/packages/tui-rs/Cargo.toml"
+mkdir -p "$HOME/.local/bin"
+ln -sf "$REPO/bin/aioven" "$HOME/.local/bin/aioven"
+echo "• linked $HOME/.local/bin/aioven"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "  add ~/.local/bin to PATH" ;; esac
+echo "done — run: aioven"

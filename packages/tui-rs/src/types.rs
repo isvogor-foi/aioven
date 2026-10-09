@@ -52,6 +52,15 @@ pub struct Session {
     pub tokens: Option<Tokens>,
     #[serde(default)]
     pub time: SessionTime,
+    /// P5: set after "undo": messages from this one on are hidden until the next prompt
+    #[serde(default)]
+    pub revert: Option<SessionRevert>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+pub struct SessionRevert {
+    #[serde(rename = "messageID")]
+    pub message_id: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
@@ -213,6 +222,8 @@ pub enum PartKind {
     },
     StepStart {},
     StepFinish {},
+    /// files changed by the step (P7: triggers a diff refresh)
+    Patch {},
     #[serde(other)]
     Other,
 }
@@ -253,6 +264,9 @@ pub struct FileDiff {
     pub deletions: i64,
     #[serde(default)]
     pub status: Option<String>,
+    /// P7: unified diff of the file
+    #[serde(default)]
+    pub patch: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -412,6 +426,9 @@ pub struct ModelInfo {
     pub id: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    /// P6: reasoning variants (e.g. low/medium/high) by name
+    #[serde(default)]
+    pub variants: std::collections::BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]

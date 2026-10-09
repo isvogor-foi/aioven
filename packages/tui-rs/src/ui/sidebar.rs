@@ -24,7 +24,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         total = total.add(u);
         let b = budget::budget(&app.store.config, &name, i > 0);
         let used = u.total();
-        let color = if used > b { Theme::RED } else if used >= b * 0.8 { Theme::YELLOW } else { Theme::AQUA };
+        let color = if used > b { Theme::c().red } else if used >= b * 0.8 { Theme::c().yellow } else { Theme::c().aqua };
         let label = fit(&name, 11);
         tok.push(Line::from(vec![
             Span::styled(format!("{label:<11} "), Theme::text()),
@@ -34,7 +34,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     }
     tok.push(Line::default());
     let cache = derive::cache_hit(&total).map(|c| format!(" · cache {c}%")).unwrap_or_default();
-    tok.push(Line::from(Span::styled(format!("Σ {}{cache}", derive::tokens(total.total())), Style::default().fg(Theme::TEXT).add_modifier(Modifier::BOLD))));
+    tok.push(Line::from(Span::styled(format!("Σ {}{cache}", derive::tokens(total.total())), Style::default().fg(Theme::c().text).add_modifier(Modifier::BOLD))));
     tok.push(Line::from(Span::styled(
         format!("in {} · out {}", derive::tokens(total.input + total.cache_read + total.cache_write), derive::tokens(total.output)),
         Theme::muted(),
@@ -49,9 +49,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         }
         let name = derive::agent_name(&app.store, id, i);
         let color = match w {
-            derive::Wait::Permission(_) | derive::Wait::Question => Theme::YELLOW,
-            derive::Wait::Error(_) => Theme::RED,
-            _ => Theme::AQUA,
+            derive::Wait::Permission(_) | derive::Wait::Question => Theme::c().yellow,
+            derive::Wait::Error(_) => Theme::c().red,
+            _ => Theme::c().aqua,
         };
         let spin = if w.is_busy() { crate::ui::ticker::spinner(app.now) } else { "✗" };
         let live = app.live_output(id).map(|t| format!(" ↑{}", derive::tokens(t as f64))).unwrap_or_default();
@@ -69,7 +69,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         run.push(Line::default());
         let mut l = vec![
             Span::styled("RECIPE ", Theme::title()),
-            Span::styled(crate::ui::ticker::bar_thick(eta.done as f64, eta.total as f64, 6), Style::default().fg(Theme::BLUE)),
+            Span::styled(crate::ui::ticker::bar_thick(eta.done as f64, eta.total as f64, 6), Style::default().fg(Theme::c().blue)),
             Span::styled(format!(" {}/{}", eta.done, eta.total), Theme::text()),
         ];
         if let Some(ms) = eta.eta_ms {
