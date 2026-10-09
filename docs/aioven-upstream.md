@@ -1,10 +1,10 @@
 # Keeping up with OpenCode
 
-AIOven is a deep fork, so **merge** upstream; don't rebase, because a rebase would replay every rename against new upstream code. Remotes: `origin` = the AIOven fork, `upstream` = `anomalyco/opencode`.
+AIOven is a deep fork, so **merge** upstream; don't rebase, because a rebase would replay every rename against new upstream code. Remotes: `origin` = the AIOven fork (branch `main`), `upstream` = `anomalyco/opencode` (only its `dev` is fetched).
 
 ```sh
 git fetch upstream dev
-git switch -c sync/$(date +%F) agents-panel
+git switch -c sync-$(date +%F) main
 git merge upstream/dev            # resolve conflicts (see hot spots)
 bun install && (cd packages/opencode && bun run typecheck)
 cargo test --manifest-path packages/tui-rs/Cargo.toml
