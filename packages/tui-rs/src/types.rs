@@ -448,3 +448,23 @@ pub struct ProviderList {
     #[serde(default)]
     pub connected: Vec<String>,
 }
+
+/// T28: GET /experimental/aioven/agents — an AIOven agent with its size and resolved model.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+pub struct AgentModel {
+    pub name: String,
+    #[serde(default)]
+    pub mode: String,
+    /// recommended size: small | medium | large
+    #[serde(default)]
+    pub recommended: String,
+    /// chosen size
+    #[serde(default)]
+    pub tier: String,
+    /// provider/model; None = server default
+    #[serde(default)]
+    pub model: Option<String>,
+    /// agent | tier | default
+    #[serde(default)]
+    pub source: String,
+}

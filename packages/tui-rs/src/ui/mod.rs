@@ -174,6 +174,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     popups::render_connect(f, f.area(), app);
     popups::render_sessions(f, f.area(), app);
     popups::render_rename(f, f.area(), app);
+    popups::render_agents(f, f.area(), app);
     dialogs::render(f, f.area(), app);
 }
 

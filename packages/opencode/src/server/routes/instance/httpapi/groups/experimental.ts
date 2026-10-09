@@ -41,6 +41,15 @@ const AIOvenUsageDay = Schema.Struct({
   cost: Schema.Finite,
   messages: Schema.Finite,
 }).annotate({ identifier: "AIOvenUsageDay" })
+const AIOvenSize = Schema.Literals(["small", "medium", "large"])
+const AIOvenAgentModel = Schema.Struct({
+  name: Schema.String,
+  mode: Schema.Literals(["primary", "subagent"]),
+  recommended: AIOvenSize,
+  tier: AIOvenSize,
+  model: Schema.optional(Schema.String),
+  source: Schema.Literals(["agent", "tier", "default"]),
+}).annotate({ identifier: "AIOvenAgentModel" })
 const AIOvenUsageResponse = Schema.Struct({
   first: Schema.optionalKey(Schema.String),
   days: Schema.mutable(Schema.Array(AIOvenUsageDay)),
@@ -112,6 +121,7 @@ export const ExperimentalPaths = {
   capabilities: "/experimental/capabilities",
   aiovenUsage: "/experimental/aioven/usage",
   aiovenDiff: "/experimental/aioven/session/:sessionID/diff",
+  aiovenAgents: "/experimental/aioven/agents",
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
   consoleSwitch: "/experimental/console/switch",
@@ -157,6 +167,16 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "experimental.aioven.diff",
             summary: "AIOven session diff",
             description: "Diff of every file changed in the session, from its first snapshot to its last (AIOven blueprint).",
+          }),
+        ),
+        HttpApiEndpoint.get("aiovenAgents", ExperimentalPaths.aiovenAgents, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(AIOvenAgentModel), "AIOven agents with their size and model"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.aioven.agents",
+            summary: "AIOven agents",
+            description: "The AIOven agents with recommended size, chosen size and resolved model.",
           }),
         ),
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {

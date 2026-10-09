@@ -6,7 +6,7 @@ use ratatui::backend::TestBackend;
 use crate::api::Api;
 use crate::app::{App, View};
 use crate::keys::{Action, Focus};
-use crate::types::{FileDiff, PermissionRequest, Session};
+use crate::types::{AgentModel, FileDiff, PermissionRequest, Session};
 
 fn app(root: Option<Session>) -> App {
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -87,4 +87,30 @@ fn usage_page_and_theme() {
     super::Theme::set("light");
     assert_eq!(super::Theme::c(), super::palette("light"));
     super::Theme::set("blue");
+}
+
+#[tokio::test]
+async fn agents_section_and_models_popup() {
+    let mut a = app(Some(session("ses_1")));
+    let agent = |name: &str, rec: &str, tier: &str, model: Option<&str>, source: &str| AgentModel {
+        name: name.into(),
+        mode: "subagent".into(),
+        recommended: rec.into(),
+        tier: tier.into(),
+        model: model.map(str::to_string),
+        source: source.into(),
+    };
+    a.agent_models = vec![
+        agent("bake", "medium", "medium", Some("google/gemini-flash"), "default"),
+        agent("pantry", "small", "small", Some("gh/gpt-mini"), "tier"),
+    ];
+    let s = screen(&mut a, 160, 40);
+    assert!(s.contains("AGENTS · ctrl+p models"), "{s}");
+    assert!(s.contains("bake        M gemini-flash") && s.contains("pantry      S gpt-mini"), "{s}");
+    a.update(Action::OpenMenu);
+    a.apply_menu(crate::menu::Item::AgentModels);
+    a.update(Action::PopupMove(1));
+    a.update(Action::PopupAccept);
+    let s = screen(&mut a, 160, 40);
+    assert!(s.contains("PANTRY MODEL") && s.contains("★ Recommended: small → default model"), "{s}");
 }

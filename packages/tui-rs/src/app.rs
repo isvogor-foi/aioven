@@ -51,6 +51,7 @@ pub enum NetMsg {
     /// P3: file search results for an "@query"
     Files { query: String, list: Vec<String> },
     Variants(std::collections::HashMap<(String, String), Vec<String>>),
+    AgentModels(Vec<crate::types::AgentModel>),
     /// P8: the pending root session was created
     Created(Session),
     Config(serde_json::Value),
@@ -91,6 +92,10 @@ pub struct App {
     pub rename: Option<String>,
     /// P7: index of the selected changed file in the blueprint (Files focus, [ / ])
     pub file_sel: usize,
+    /// T28: AIOven agents with their size and model (right bar, settings)
+    pub agent_models: Vec<crate::types::AgentModel>,
+    /// T29 popup: None = closed; agent None = agent list, Some(i) = choices for agent i
+    pub agents_popup: Option<AgentsPopup>,
     /// P6: reasoning variants per (provider, model)
     pub variants: std::collections::HashMap<(String, String), Vec<String>>,
     pub usage: Option<crate::usage::Usage>,
@@ -111,6 +116,13 @@ pub struct App {
     pub files_area: ratatui::layout::Rect,
     loaded: HashSet<String>,
     tx: UnboundedSender<NetMsg>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AgentsPopup {
+    pub agent: Option<usize>,
+    pub sel: usize,
+    pub query: String,
 }
 
 pub fn now_ms() -> i64 {
@@ -154,6 +166,8 @@ impl App {
             edit_request: None,
             rename: None,
             file_sel: 0,
+            agent_models: Vec::new(),
+            agents_popup: None,
             variants: Default::default(),
             usage: None,
             usage_year: 0,
@@ -199,7 +213,9 @@ impl App {
         } else {
             Modal::None
         };
-        let popup = if self.rename.is_some() {
+        let popup = if self.agents_popup.is_some() {
+            Popup::AgentModels
+        } else if self.rename.is_some() {
             Popup::Rename
         } else if self.sessions_popup.is_some() {
             Popup::Sessions
@@ -272,14 +288,44 @@ impl App {
             .collect()
     }
 
-    pub fn menu_items(&self) -> Vec<(String, Item)> {
-        let aioven = self.store.config.get("aioven");
-        let terse = aioven.and_then(|a| a.get("terse")).and_then(|v| v.as_str()).unwrap_or("ultra").to_string();
-        let tiers: Vec<(String, String)> = aioven
+    /// aioven.tiers as (size, provider/model).
+    pub fn tier_models(&self) -> Vec<(String, String)> {
+        self.store
+            .config
+            .get("aioven")
             .and_then(|a| a.get("tiers"))
             .and_then(|t| t.as_object())
             .map(|o| o.iter().filter_map(|(k, v)| v.as_str().map(|m| (k.clone(), m.to_string()))).collect())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
+
+    /// T29: rows of the open agents popup (agent list, or the filtered choices of one agent).
+    pub fn agents_popup_rows(&self) -> Vec<(String, Option<crate::agent_models::Choice>)> {
+        let Some(p) = &self.agents_popup else { return vec![] };
+        match p.agent.and_then(|i| self.agent_models.get(i)) {
+            None => self
+                .agent_models
+                .iter()
+                .map(|a| {
+                    let model = a.model.as_deref().map(|m| m.rsplit('/').next().unwrap_or(m)).unwrap_or("auto");
+                    (format!("{:<12} recommended {:<6}  now {} · {model}", a.name, a.recommended, a.tier), None)
+                })
+                .collect(),
+            Some(a) => {
+                let q = p.query.to_lowercase();
+                crate::agent_models::choices(a, &self.tier_models(), &self.models)
+                    .into_iter()
+                    .filter(|(l, _)| q.is_empty() || l.to_lowercase().contains(&q))
+                    .map(|(l, c)| (l, Some(c)))
+                    .collect()
+            }
+        }
+    }
+
+    pub fn menu_items(&self) -> Vec<(String, Item)> {
+        let aioven = self.store.config.get("aioven");
+        let terse = aioven.and_then(|a| a.get("terse")).and_then(|v| v.as_str()).unwrap_or("ultra").to_string();
+        let tiers = self.tier_models();
         let variants = self.current_variants();
         let theme = self.theme_name();
         menu::items(&menu::Context {
@@ -408,7 +454,18 @@ impl App {
         });
     }
 
+    /// T28: (re)load the agents' models; after start and every settings save.
+    pub fn load_agent_models(&self) {
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            if let Ok(list) = api.agent_models().await {
+                let _ = tx.send(NetMsg::AgentModels(list));
+            }
+        });
+    }
+
     pub fn load_meta(&self) {
+        self.load_agent_models();
         let (api, tx) = (self.api.clone(), self.tx.clone());
         tokio::spawn(async move {
             if let Ok(list) = api.commands().await {
@@ -524,7 +581,7 @@ impl App {
         }
     }
 
-    fn apply_menu(&mut self, item: Item) {
+    pub fn apply_menu(&mut self, item: Item) {
         self.menu_open = false;
         match item {
             Item::Model { provider, model } => {
@@ -539,6 +596,10 @@ impl App {
             Item::Connect => self.open_connect(),
             Item::Usage => self.update(Action::Usage),
             Item::Sessions => self.open_sessions(),
+            Item::AgentModels => {
+                self.load_agent_models();
+                self.agents_popup = Some(AgentsPopup::default());
+            }
             Item::Rename => {
                 self.rename = Some(self.store.sessions.get(&self.root).map(|s| s.title.clone()).unwrap_or_default());
             }
@@ -750,8 +811,10 @@ impl App {
             NetMsg::Sessions(list) => self.session_list = list,
             NetMsg::Files { query, list } => self.file_matches = (query, list),
             NetMsg::Variants(v) => self.variants = v,
+            NetMsg::AgentModels(list) => self.agent_models = list,
             NetMsg::Config(cfg) => {
                 self.store.config = cfg;
+                self.load_agent_models();
                 crate::ui::Theme::set(&self.theme_name());
             }
             NetMsg::Created(s) => {
@@ -1029,6 +1092,46 @@ impl App {
             Action::Scroll(Pane::Files, d) => self.files_scroll = (self.files_scroll as i32 + d as i32).clamp(0, 10_000) as u16,
             Action::ScrollEdge(Pane::Chat, top) => self.chat_scroll = if top { 10_000 } else { 0 },
             Action::ScrollEdge(Pane::Files, top) => self.files_scroll = if top { 0 } else { 10_000 },
+            Action::PopupMove(d) if self.agents_popup.is_some() => {
+                let n = self.agents_popup_rows().len().max(1) as i64;
+                if let Some(p) = self.agents_popup.as_mut() {
+                    p.sel = (p.sel as i64 + d as i64).rem_euclid(n) as usize;
+                }
+            }
+            Action::PopupAccept if self.agents_popup.is_some() => {
+                let rows = self.agents_popup_rows();
+                let Some(p) = self.agents_popup.clone() else { return };
+                match p.agent {
+                    None if p.sel < self.agent_models.len() => {
+                        self.agents_popup = Some(AgentsPopup { agent: Some(p.sel), sel: 0, query: String::new() })
+                    }
+                    Some(i) => {
+                        if let (Some(a), Some((label, Some(choice)))) = (self.agent_models.get(i).cloned(), rows.get(p.sel).cloned()) {
+                            let label = label.trim_end_matches("  ✓").to_string();
+                            self.save_global(crate::agent_models::patch(&a, &choice), format!("{} → {label}", a.name));
+                        }
+                        self.agents_popup = Some(AgentsPopup { agent: None, sel: i, query: String::new() });
+                    }
+                    None => {}
+                }
+            }
+            Action::PopupClose if self.agents_popup.is_some() => {
+                let back = self.agents_popup.as_ref().and_then(|p| p.agent);
+                self.agents_popup = back.map(|i| AgentsPopup { agent: None, sel: i, query: String::new() });
+            }
+            Action::MenuInput(key) if self.agents_popup.is_some() => {
+                use crossterm::event::KeyCode;
+                if let Some(p) = self.agents_popup.as_mut().filter(|p| p.agent.is_some()) {
+                    match key.code {
+                        KeyCode::Char(c) => p.query.push(c),
+                        KeyCode::Backspace => {
+                            p.query.pop();
+                        }
+                        _ => {}
+                    }
+                    p.sel = 0;
+                }
+            }
             Action::PopupAccept if self.rename.is_some() => {
                 let title = self.rename.take().unwrap_or_default();
                 let (api, id) = (self.api.clone(), self.root.clone());

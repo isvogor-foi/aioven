@@ -885,3 +885,55 @@ Verified live in tmux with a fake model (`scratchpad/p/fake2.ts`) unless noted.
 | P15 | ✓ themes blue/midnight/mono/light; saved as `aioven.theme` (schema added). |
 | P1, P2 | **Not done:** they need the user's login and paid runs; steps in `docs/aioven-validation.md`. |
 | P13 | Push/merge waits for the user's confirmation. |
+
+---
+
+# T27–T30 Agents and their models — design (confirmed 2026-10-09)
+
+Goal: the right bar always shows the 6 AIOven agents (bake, recipe, pantry, taster, thermometer, cookbook) with their model and size. The settings menu lets you choose a model per agent and shows the recommended size.
+
+## Components
+
+| Component | Where | New/reuse |
+|---|---|---|
+| AIOvenDefaults (recommended size per agent) | `core/src/aioven.ts` | reuse (`AGENTS[name].tier`) |
+| Config schema | `core/src/v1/config/config.ts` `aioven.agents.<name>.model` | new field |
+| AIOven.agent | `opencode/src/aioven/index.ts` | change: per-agent model wins over the size's model; `""` = unset |
+| AIOvenAgents (resolution) | `opencode/src/aioven/agents.ts` | new, pure |
+| Agents endpoint | `GET /experimental/aioven/agents` (group + handler) | new |
+| Api | `tui-rs/src/api.rs` `agent_models()` | new |
+| Sidebar AGENTS section | `tui-rs/src/ui/sidebar.rs` | new section |
+| AgentModels popup | `tui-rs/src/agent_models.rs` (pure list) + `ui/popups.rs` + `app.rs` | new |
+
+## Interfaces
+```ts
+// opencode/src/aioven/agents.ts
+type Size = "small" | "medium" | "large"
+type AgentModel = { name: string; mode: "primary" | "subagent"; recommended: Size; tier: Size;
+                    model?: string /* provider/model */; source: "agent" | "tier" | "default" }
+export function list(input: { settings?: Settings; agents: { name: string; mode: string; model?: { providerID; modelID } }[];
+                     defaultModel?: string }): AgentModel[]
+// source: "agent" = aioven.agents.<n>.model; "tier" = aioven.tiers[tier]; "default" = config model (main agents),
+// or the parent's model for subagents (model shown is the default model)
+```
+```rust
+// tui-rs
+Api::agent_models() -> Vec<AgentModel>          // GET /experimental/aioven/agents
+agent_models::choices(agent: &AgentModel, tiers: &[(String,String)], models: &[(p,m,label)]) -> Vec<(String, Choice)>
+enum Choice { Recommended, Tier(String), Model { provider, model } }
+// Recommended → patch {aioven:{agents:{n:{tier: recommended, model: ""}}}}
+// Tier(t)     → patch {aioven:{agents:{n:{tier: t, model: ""}}}}
+// Model       → patch {aioven:{agents:{n:{model: "p/m"}}}}
+Popup::AgentModels { agent: Option<usize>, sel }   // agent None = agent list, Some = choice list
+```
+
+## Communication
+- The client reads `GET /experimental/aioven/agents` at start, after every settings save, and on config reload.
+- A save goes through `PATCH /global/config` (deep merge). The server rebuilds the agents on config change, and new prompts and subagents use the new model.
+- The sidebar shows `● name  S  model`. The dot is lit while that agent is running in this session. The model is dimmed when it comes from the default.
+
+## T27–T30 status (2026-10-09)
+- T27 ✓ `GET /experimental/aioven/agents`, the `aioven.agents.<n>.model` setting, and AIOven.agent preferring it. Unit tests: `test/aioven/agents.test.ts` and `aioven.test.ts`.
+- T28 ✓ The right bar's AGENTS section, verified live: 6 rows such as `○ pantry  S fake`, and `bake L` after a size change.
+- T29 ✓ Ctrl+P → Agents & models, verified live: choosing a model saved `aioven.agents.pantry.model` (the endpoint reports source `agent`); "Size large" saved `tier: large`; ★ Recommended reset the agent to `{tier: small, model: ""}`.
+- T30 ✓ Rust unit tests (choices, patches) and a render test (AGENTS section + popup).

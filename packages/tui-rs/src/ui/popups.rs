@@ -197,3 +197,39 @@ pub fn render_rename(f: &mut Frame, area: Rect, app: &App) {
         rect,
     );
 }
+
+/// T29 Agents & models: agent list, then the choices for one agent (recommended size first).
+pub fn render_agents(f: &mut Frame, area: Rect, app: &App) {
+    let Some(p) = &app.agents_popup else { return };
+    let rows = app.agents_popup_rows();
+    let shown = 16usize;
+    let rect = centered(area, 84, (rows.len().min(shown) as u16) + 4);
+    let inner = rect.width.saturating_sub(2) as usize;
+    let agent = p.agent.and_then(|i| app.agent_models.get(i));
+    let mut lines = vec![match agent {
+        Some(a) => Line::from(vec![
+            Span::styled("› ", Style::default().fg(Theme::c().aqua)),
+            Span::styled(p.query.clone(), Theme::text()),
+            Span::styled("▏", Style::default().fg(Theme::c().aqua)),
+            Span::styled(format!("   recommended size for {}: {}", a.name, a.recommended), Theme::muted()),
+        ]),
+        None => Line::from(Span::styled("choose an agent; sizes: S small · M medium · L large", Theme::muted())),
+    }];
+    lines.push(Line::from(Span::styled("─".repeat(inner), Style::default().fg(Theme::c().dim))));
+    let start = p.sel.saturating_sub(shown - 1);
+    for (i, (label, _)) in rows.iter().enumerate().skip(start).take(shown) {
+        lines.push(row(i == p.sel, label.clone(), String::new(), inner));
+    }
+    if rows.is_empty() {
+        lines.push(Line::from(Span::styled("  loading agents…", Theme::muted())));
+    }
+    let title = match agent {
+        Some(a) => format!("{} MODEL · type to filter · ⏎ use · esc back", a.name.to_uppercase()),
+        None => "AGENTS & MODELS · ⏎ choose · esc close".into(),
+    };
+    f.render_widget(Clear, rect);
+    f.render_widget(
+        Paragraph::new(lines).block(panel(&title).border_style(Style::default().fg(Theme::c().blue)).style(Style::default().bg(Theme::c().panel))),
+        rect,
+    );
+}

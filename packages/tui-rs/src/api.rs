@@ -144,6 +144,10 @@ impl Api {
             })
             .collect())
     }
+    /// T28: AIOven agents with size and resolved model.
+    pub async fn agent_models(&self) -> Result<Vec<AgentModel>> {
+        self.get("/experimental/aioven/agents").await
+    }
     /// P6: reasoning variants per (provider, model) of connected providers.
     pub async fn variants(&self) -> Result<HashMap<(String, String), Vec<String>>> {
         let list: ProviderList = self.get("/provider").await?;

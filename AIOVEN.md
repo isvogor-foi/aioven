@@ -17,6 +17,8 @@ Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|rec
 - **Sidebar:** tokens burned per agent against its budget, total and cache hit, running tasks, recipe progress and ETA.
 - **Bottom:** the input box (shows the current main agent) and a status line.
 
+**Right bar:** AGENTS lists the 6 agents with their size (S/M/L) and model, always visible. The dot is lit while an agent runs. The size letter is green when it's the recommended size and yellow when you changed it. A dimmed model means the agent uses your default model (subagents use their parent's). Below it are TOKENS BURNED and RUNNING.
+
 ## Keys
 
 | Key | Action |
@@ -31,7 +33,7 @@ Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|rec
 | `!command` + send | run a shell command in the session; its output becomes part of the conversation |
 | Ctrl+E | edit the prompt in `$VISUAL`/`$EDITOR` (fallback vi) |
 | Ctrl+U | usage page: heat map of tokens per day for a year (←/→), monthly bars, totals since install |
-| Ctrl+P | menu: sessions, session rename / undo last turn / redo / export / delete, reasoning level, theme, connect provider, usage stats, caveman level, model per tier, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
+| Ctrl+P | menu: agents & models (pick a model or size per agent, ★ = recommended size), sessions, session rename / undo last turn / redo / export / delete, reasoning level, theme, connect provider, usage stats, caveman level, model per tier, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
 | Ctrl+B | move running foreground subagents to the background (inside tmux press Ctrl+B twice, or use the Ctrl+P menu) |
 | Ctrl+↑ | focus chat, then blueprint (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
 | `[` `]` in the focused blueprint | select a changed file; Enter shows its diff (Esc back) |

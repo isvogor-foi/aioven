@@ -22,6 +22,12 @@ describe("AIOven.agent", () => {
     expect(AIOven.agent(settings, "thermometer")?.model).toBe("github-copilot/gpt-5-mini")
     expect(AIOven.agent(settings, "bake")?.model).toBeUndefined()
   })
+
+  test("a per-agent model wins over its tier; empty means use the tier", () => {
+    const tiers = { small: "gh/mini" }
+    expect(AIOven.agent({ tiers, agents: { pantry: { model: "gh/opus" } } }, "pantry")?.model).toBe("gh/opus")
+    expect(AIOven.agent({ tiers, agents: { pantry: { model: "" } } }, "pantry")?.model).toBe("gh/mini")
+  })
 })
 
 describe("AIOven.terse", () => {

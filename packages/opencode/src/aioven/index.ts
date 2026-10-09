@@ -15,7 +15,8 @@ export function agent(settings: Settings | undefined, name: string) {
   return {
     tier,
     budget: override?.budget ?? base?.budget,
-    model: settings?.tiers?.[tier],
+    // a per-agent model (T29) wins over the tier's model; "" means "use the tier"
+    model: override?.model || settings?.tiers?.[tier],
     variant: AIOvenDefaults.VARIANT[tier],
   }
 }

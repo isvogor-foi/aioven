@@ -25,6 +25,7 @@ pub enum Popup {
     Connect,
     Sessions,
     Rename,
+    AgentModels,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,7 +133,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
     }
 
     match ctx.popup {
-        Popup::Menu | Popup::Connect | Popup::Sessions | Popup::Rename => {
+        Popup::Menu | Popup::Connect | Popup::Sessions | Popup::Rename | Popup::AgentModels => {
             return match key.code {
                 KeyCode::Up => Some(Action::PopupMove(-1)),
                 KeyCode::Down => Some(Action::PopupMove(1)),

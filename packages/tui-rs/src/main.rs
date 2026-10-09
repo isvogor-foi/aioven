@@ -2,6 +2,7 @@
 //!
 //! Usage: aioven-tui [project-dir] [-s <session-id>] [--attach <url>]
 
+mod agent_models;
 mod api;
 mod app;
 mod brand;

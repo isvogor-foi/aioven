@@ -186,6 +186,9 @@ export const Info = Schema.Struct({
           Schema.String,
           Schema.Struct({
             tier: Schema.optional(Schema.Literals(["small", "medium", "large"])),
+            model: Schema.optional(Schema.String).annotate({
+              description: "Model for this agent (provider/model); empty = use its tier's model",
+            }),
             budget: Schema.optional(PositiveInt).annotate({ description: "Soft token budget per run" }),
           }),
         ),

@@ -78,8 +78,43 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         run.push(Line::from(l));
     }
 
-    let tok_h = (tok.len() as u16 + 2).min(area.height / 2 + 2);
-    let parts = Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(tok_h), Constraint::Min(3)]).split(area);
-    f.render_widget(Paragraph::new(tok).block(panel("TOKENS BURNED")), parts[0]);
-    f.render_widget(Paragraph::new(run).block(panel("RUNNING")), parts[1]);
+    // T28 AGENTS: every AIOven agent with its size and model, always shown
+    let busy: Vec<String> = ids
+        .iter()
+        .enumerate()
+        .filter(|(_, id)| app.wait(id).is_busy())
+        .map(|(i, id)| derive::agent_name(&app.store, id, i))
+        .collect();
+    let agents: Vec<Line> = if app.agent_models.is_empty() {
+        vec![Line::from(Span::styled("loading…", Theme::muted()))]
+    } else {
+        app.agent_models.iter().map(|a| agent_line(a, busy.contains(&a.name), inner)).collect()
+    };
+
+    let agents_h = agents.len() as u16 + 2;
+    let tok_h = (tok.len() as u16 + 2).min(area.height.saturating_sub(agents_h) / 2 + 2);
+    let parts = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(agents_h), Constraint::Length(tok_h), Constraint::Min(3)])
+        .split(area);
+    f.render_widget(Paragraph::new(agents).block(panel("AGENTS · ctrl+p models")), parts[0]);
+    f.render_widget(Paragraph::new(tok).block(panel("TOKENS BURNED")), parts[1]);
+    f.render_widget(Paragraph::new(run).block(panel("RUNNING")), parts[2]);
+}
+
+/// `● pantry  S gemini-flash`: dot lit while running; size letter (★ colour when it is the recommended size);
+/// model dimmed when it is the server default.
+pub fn agent_line(a: &crate::types::AgentModel, running: bool, width: usize) -> Line<'static> {
+    let size = a.tier.chars().next().unwrap_or('?').to_ascii_uppercase();
+    let model = a.model.as_deref().map(|m| m.rsplit('/').next().unwrap_or(m).to_string()).unwrap_or_else(|| "auto".into());
+    let size_color = if a.tier == a.recommended { Theme::c().green } else { Theme::c().yellow };
+    Line::from(vec![
+        Span::styled(if running { "● " } else { "○ " }, Style::default().fg(if running { Theme::c().aqua } else { Theme::c().dim })),
+        Span::styled(format!("{:<11} ", fit(&a.name, 11)), Theme::text()),
+        Span::styled(format!("{size} "), Style::default().fg(size_color).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            fit(&model, width.saturating_sub(16)),
+            if a.source == "default" { Style::default().fg(Theme::c().dim) } else { Theme::muted() },
+        ),
+    ])
 }
