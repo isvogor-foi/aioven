@@ -85,7 +85,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let skills = app.used_skills();
     let skills_text = if skills.is_empty() { String::new() } else { format!(" ┆ skills: {} ", skills.join(" · ")) };
     let (done, total) = crate::ui::blueprint::progress(app);
-    let blueprint = if total > 0 { format!(" B blueprint {done}/{total} ") } else { " B blueprint ".to_string() };
+    let blueprint = if total > 0 { format!(" G blueprint {done}/{total} ") } else { " G blueprint ".to_string() };
     let usage_tab = " U usage ";
     let room = (area.width as usize).saturating_sub(blueprint.chars().count() + skills_text.chars().count() + 11);
     let fitted = fit_tabs(&tabs, room);

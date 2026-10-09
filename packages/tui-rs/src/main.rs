@@ -126,11 +126,22 @@ async fn main() -> Result<()> {
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     )
     .is_ok();
+    // xterm modifyOtherKeys: tmux (extended-keys on) only reports Shift+Enter etc. when the app asks this way
+    {
+        use std::io::Write;
+        let _ = out.write_all(b"\x1b[>4;2m");
+        let _ = out.flush();
+    }
     let mut terminal = Terminal::new(CrosstermBackend::new(out))?;
     let result = run(&mut terminal, &mut app, &mut net_rx, &mut stream).await;
 
     if enhanced {
         let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
+    }
+    {
+        use std::io::Write;
+        let _ = terminal.backend_mut().write_all(b"\x1b[>4;0m");
+        let _ = terminal.backend_mut().flush();
     }
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), DisableMouseCapture, LeaveAlternateScreen)?;

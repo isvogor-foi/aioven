@@ -708,7 +708,9 @@ impl App {
                 });
             }
             Action::Permission(reply) => {
-                if let Some(req) = self.pending_permission().map(|r| r.id.clone()) {
+                if let Some((req, session)) = self.pending_permission().map(|r| (r.id.clone(), r.session_id.clone())) {
+                    // answer once: drop it locally so a repeated key can't reply twice (server 404)
+                    store::apply(&mut self.store, Event::PermissionReplied { session_id: session, request_id: req.clone() });
                     let api = self.api.clone();
                     self.spawn(async move { api.permission_reply(&req, reply).await });
                 }
@@ -722,8 +724,9 @@ impl App {
             Action::QuestionAnswer => {
                 let Some(q) = self.pending_question() else { return };
                 let label = q.questions.first().and_then(|i| i.options.get(self.question_sel)).map(|o| o.label.clone());
-                let (api, id) = (self.api.clone(), q.id.clone());
+                let (api, id, session) = (self.api.clone(), q.id.clone(), q.session_id.clone());
                 self.question_sel = 0;
+                store::apply(&mut self.store, Event::QuestionDone { session_id: session, request_id: id.clone() });
                 if let Some(label) = label {
                     self.spawn(async move { api.question_reply(&id, vec![vec![label]]).await });
                 }

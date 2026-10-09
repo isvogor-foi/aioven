@@ -10,7 +10,7 @@ Run it with `aioven [project-path]` (or `bun dev` inside this repo).
 
 Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|recipe] [--prompt text]`, `aioven attach <url>`.
 
-- **Top bar:** one tab per agent (`0` = main, `1`–`9` = subagents) with live status, then the skills used in the session, then `U usage` and `B blueprint`.
+- **Top bar:** one tab per agent (`0` = main, `1`–`9` = subagents) with live status, then the skills used in the session, then `U usage` and `G blueprint` (Ctrl+G).
 - **Middle:** the blueprint on top (recipe components, their interfaces, changed files, communication), chat of the selected tab below. Tool calls show as one line each.
 - **Sidebar:** tokens burned per agent against its budget, total and cache hit, running tasks, recipe progress and ETA.
 - **Bottom:** the input box (shows the current main agent) and a status line.
@@ -39,7 +39,7 @@ Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|rec
 | y / a / n | permission prompt: once / always / reject |
 | Ctrl+C twice | quit |
 
-Status line: `bake M model` = main agent, its tier (S/M/L = small/medium/large) and model. `B blueprint` = the blueprint tab and its key letter.
+Status line: `bake M model` = main agent, its tier (S/M/L = small/medium/large) and model. `G blueprint` = the blueprint tab and its key (Ctrl+G).
 
 Shift+digits are not tab keys, because Shift+1 is how you type `!`.
 

@@ -147,6 +147,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
     // keys that work in every focus
     match key.code {
         KeyCode::Char(c) if (alt || ctrl) && digit(c).is_some() => return Some(Action::SelectTab(digit(c)?)),
+        // Ctrl+B = move running subagents to the background (inside tmux press it twice); blueprint is Ctrl+G
         KeyCode::Char('b') if ctrl => return Some(Action::Background),
         KeyCode::Char('p') if ctrl => return Some(Action::OpenMenu),
         KeyCode::Char('g') if ctrl => return Some(Action::Blueprint),
