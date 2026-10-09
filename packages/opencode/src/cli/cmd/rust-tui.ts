@@ -2,7 +2,7 @@ import path from "path"
 import { UI } from "@/cli/ui"
 
 // T21: the interactive TUI is the Ratatui client (packages/tui-rs). The OpenTUI app was removed.
-export function rustTuiBinary() {
+function rustTuiBinary() {
   const candidates = [
     process.env.AIOVEN_TUI_BIN,
     path.resolve(import.meta.dir, "../../../../tui-rs/target/release/aioven-tui"),

@@ -11,7 +11,6 @@
   },
   "exports": {
     "./config": "./src/config/index.tsx",
-    "./context/kv": "./src/context/kv.tsx",
     "./context/runtime": "./src/context/runtime.tsx",
     "./context/theme": "./src/context/theme.tsx",
     "./context/editor": "./src/context/editor.ts",
@@ -23,9 +22,7 @@
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/locale": "./src/util/locale.ts",
-    "./util/persistence": "./src/util/persistence.ts",
     "./util/record": "./src/util/record.ts",
-    "./logo": "./src/logo.ts",
     "./brand": "./src/brand.ts",
     "./ui/spinner": "./src/ui/spinner.ts",
     "./component/spinner": "./src/component/spinner.tsx",

@@ -21,5 +21,3 @@ pulldown-cmark = { version = "0.12", default-features = false }
 tui-textarea = "0.7"
 anyhow = "1"
 url = "2"
-unicode-width = "0.2"
-async-trait = "0.1"

@@ -1,8 +1,5 @@
 //! R10 Brand: Rust copy of `packages/tui/src/brand.ts` (glyphs + forced blue colours).
 
-use ratatui::style::Color;
-
-pub const NAME: &str = "AIOven";
 pub const COMMAND: &str = "aioven";
 
 pub const LEFT: [&str; 4] = ["     ▀", "▀▀▀█ █", "█^^█ █", "▀▀▀▀ ▀"];
@@ -12,10 +9,6 @@ pub const AQUA: (u8, u8, u8) = (0x22, 0xd3, 0xee);
 pub const BLUE: (u8, u8, u8) = (0x3b, 0x82, 0xf6);
 pub const AQUA_SHADOW: (u8, u8, u8) = (0x0e, 0x4a, 0x5a);
 pub const BLUE_SHADOW: (u8, u8, u8) = (0x1e, 0x3a, 0x8a);
-
-pub fn color(c: (u8, u8, u8)) -> Color {
-    Color::Rgb(c.0, c.1, c.2)
-}
 
 fn draw(line: &str, fg: (u8, u8, u8), shadow: (u8, u8, u8)) -> String {
     let f = format!("\x1b[38;2;{};{};{}m", fg.0, fg.1, fg.2);

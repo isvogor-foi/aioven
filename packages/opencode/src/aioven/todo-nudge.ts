@@ -2,7 +2,7 @@ export * as TodoNudge from "./todo-nudge"
 
 // Agents that execute todos; recipe and subagents never get nudged.
 const AGENTS = new Set(["bake"])
-export const MAX_WITHOUT_PROGRESS = 2
+const MAX_WITHOUT_PROGRESS = 2
 
 export type State = { nudges: number; done: number }
 

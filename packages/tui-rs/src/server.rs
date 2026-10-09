@@ -12,7 +12,8 @@ use url::Url;
 pub struct Server {
     pub base_url: Url,
     pub directory: PathBuf,
-    child: Option<Child>,
+    /// keeps the spawned server alive; `kill_on_drop` stops it when the client exits
+    _child: Option<Child>,
 }
 
 impl Server {
@@ -42,14 +43,10 @@ impl Server {
         .context("server did not start within 60s")??;
         // keep draining stdout so the server never blocks on a full pipe
         tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
-        Ok(Server { base_url: url, directory: project.to_path_buf(), child: Some(child) })
+        Ok(Server { base_url: url, directory: project.to_path_buf(), _child: Some(child) })
     }
 
     pub fn attach(url: Url, project: &Path) -> Server {
-        Server { base_url: url, directory: project.to_path_buf(), child: None }
-    }
-
-    pub fn owned(&self) -> bool {
-        self.child.is_some()
+        Server { base_url: url, directory: project.to_path_buf(), _child: None }
     }
 }

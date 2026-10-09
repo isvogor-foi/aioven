@@ -299,11 +299,6 @@ pub fn eta(store: &Store, root_id: &str, now: i64) -> Eta {
     Eta { eta_ms: Some(((avg * remaining as f64) as i64 - (now - last)).max(0)), ..base }
 }
 
-pub fn bar(value: f64, max: f64, width: usize) -> String {
-    let filled = if max > 0.0 { ((value / max) * width as f64).round().min(width as f64) as usize } else { 0 };
-    "▓".repeat(filled) + &"░".repeat(width - filled)
-}
-
 pub fn tokens(n: f64) -> String {
     if n >= 1_000_000.0 {
         format!("{:.1}M", n / 1_000_000.0)
@@ -422,7 +417,6 @@ mod tests {
 
     #[test]
     fn formatting() {
-        assert_eq!(bar(50.0, 100.0, 8), "▓▓▓▓░░░░");
         assert_eq!(tokens(3_200_000.0), "3.2M");
         assert_eq!(tokens(62_400.0), "62k");
         assert_eq!(seconds(125_000), "2m5s");

@@ -4,7 +4,7 @@ import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { AIOvenDefaults } from "@opencode-ai/core/aioven"
 
 export type Tier = AIOvenDefaults.Tier
-export type Terse = "off" | "lite" | "full" | "ultra"
+type Terse = "off" | "lite" | "full" | "ultra"
 type Settings = NonNullable<ConfigV1.Info["aioven"]>
 
 export function agent(settings: Settings | undefined, name: string) {
