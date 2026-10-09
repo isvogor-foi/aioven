@@ -22,6 +22,7 @@ pub enum Popup {
     None,
     Complete,
     Menu,
+    Connect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +38,8 @@ pub struct KeyContext {
     pub in_chat: bool,
     pub focus: Focus,
     pub popup: Popup,
+    /// usage page is shown (←/→ switch year)
+    pub usage: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +64,8 @@ pub enum Action {
     ScrollEdge(Pane, bool),
     Background,
     OpenMenu,
+    Usage,
+    Year(i8),
     FocusNext,
     FocusInput,
     PopupMove(i8),
@@ -118,7 +123,7 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
     }
 
     match ctx.popup {
-        Popup::Menu => {
+        Popup::Menu | Popup::Connect => {
             return match key.code {
                 KeyCode::Up => Some(Action::PopupMove(-1)),
                 KeyCode::Down => Some(Action::PopupMove(1)),
@@ -144,6 +149,9 @@ pub fn map_key(key: KeyEvent, ctx: &KeyContext) -> Option<Action> {
         KeyCode::Char('b') if ctrl => return Some(Action::Background),
         KeyCode::Char('p') if ctrl => return Some(Action::OpenMenu),
         KeyCode::Char('g') if ctrl => return Some(Action::Blueprint),
+        KeyCode::Char('u') if ctrl => return Some(Action::Usage),
+        KeyCode::Left if ctx.usage => return Some(Action::Year(-1)),
+        KeyCode::Right if ctx.usage => return Some(Action::Year(1)),
         KeyCode::Up if ctrl => return Some(Action::FocusNext),
         _ => {}
     }
@@ -191,7 +199,7 @@ mod tests {
     fn k(code: KeyCode, m: KeyModifiers) -> KeyEvent {
         KeyEvent::new(code, m)
     }
-    const CHAT: KeyContext = KeyContext { modal: Modal::None, in_chat: true, focus: Focus::Input, popup: Popup::None };
+    const CHAT: KeyContext = KeyContext { modal: Modal::None, in_chat: true, focus: Focus::Input, popup: Popup::None, usage: false };
 
     #[test]
     fn tabs_never_type() {

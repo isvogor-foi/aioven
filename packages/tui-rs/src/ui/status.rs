@@ -27,7 +27,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         hints = next;
     }
     let hints = hints.as_str();
-    let notice = app.notice.clone().unwrap_or_default();
+    let retry = match app.wait(&app.viewing) {
+        w @ derive::Wait::Retry { .. } => Some(derive::label(&w, app.now)),
+        _ => None,
+    };
+    let notice = app.notice.clone().or(retry).unwrap_or_default();
     let room = (area.width as usize).saturating_sub(left.chars().count() + hints.chars().count() + 3);
     let notice: String = notice.chars().take(room).collect();
     let pad = (area.width as usize).saturating_sub(left.chars().count() + notice.chars().count() + hints.chars().count() + 3);
@@ -35,7 +39,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(Line::from(vec![
             Span::styled(left, Style::default().fg(Theme::AQUA)),
             Span::raw("   "),
-            Span::styled(notice, Style::default().fg(Theme::YELLOW)),
+            Span::styled(notice, Style::default().fg(Theme::RED)),
             Span::raw(" ".repeat(pad)),
             Span::styled(hints, Theme::muted()),
         ])),

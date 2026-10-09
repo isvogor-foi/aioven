@@ -101,6 +101,18 @@ pub fn build(app: &App) -> Text<'static> {
             }
         }
     }
+    // T18: a stuck turn must say why (quota, auth, network…)
+    if let derive::Wait::Retry { .. } = app.wait(&app.viewing) {
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            format!("  ↻ {}", derive::label(&app.wait(&app.viewing), app.now)),
+            Style::default().fg(Theme::RED).add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(Span::styled(
+            "    esc stop · ctrl+p → model or connect provider to switch",
+            Theme::muted(),
+        )));
+    }
     Text::from(lines)
 }
 

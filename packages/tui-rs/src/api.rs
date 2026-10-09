@@ -52,6 +52,13 @@ impl Api {
     pub async fn session_create(&self) -> Result<Session> {
         Ok(serde_json::from_value(self.post("/session", json!({})).await?)?)
     }
+    /// Root sessions of the project, newest first.
+    pub async fn latest_session(&self) -> Result<Option<Session>> {
+        let mut list: Vec<Session> = self.get("/session?roots=true").await?;
+        list.retain(|s| s.parent_id.is_none());
+        list.sort_by_key(|s| std::cmp::Reverse(s.time.updated));
+        Ok(list.into_iter().next())
+    }
     pub async fn session(&self, id: &str) -> Result<Session> {
         self.get(&format!("/session/{id}")).await
     }
@@ -103,6 +110,65 @@ impl Api {
                 })
             })
             .collect())
+    }
+    /// Permission requests pending before the client connected.
+    pub async fn permissions(&self) -> Result<Vec<PermissionRequest>> {
+        self.get("/permission").await
+    }
+    /// Question requests pending before the client connected.
+    pub async fn questions(&self) -> Result<Vec<QuestionRequest>> {
+        self.get("/question").await
+    }
+    // ---- T19 connect -------------------------------------------------------------------------------
+    pub async fn provider_choices(&self) -> Result<Vec<crate::connect::ProviderChoice>> {
+        let list: ProviderList = self.get("/provider").await?;
+        Ok(list
+            .all
+            .into_iter()
+            .map(|p| crate::connect::ProviderChoice {
+                connected: list.connected.contains(&p.id),
+                name: p.name.clone().unwrap_or_else(|| p.id.clone()),
+                id: p.id,
+            })
+            .collect())
+    }
+    pub async fn auth_methods(&self) -> Result<HashMap<String, Vec<crate::connect::Method>>> {
+        let raw: HashMap<String, Vec<Value>> = self.get("/provider/auth").await?;
+        Ok(raw
+            .into_iter()
+            .map(|(id, list)| {
+                let methods = list
+                    .iter()
+                    .map(|m| crate::connect::Method {
+                        oauth: m.get("type").and_then(Value::as_str) == Some("oauth"),
+                        label: m.get("label").and_then(Value::as_str).unwrap_or("").to_string(),
+                    })
+                    .collect();
+                (id, methods)
+            })
+            .collect())
+    }
+    pub async fn set_api_key(&self, provider: &str, key: &str) -> Result<()> {
+        let res = self.http.put(self.url(&format!("/auth/{provider}"))).json(&json!({ "type": "api", "key": key })).send().await?;
+        res.error_for_status()?;
+        Ok(())
+    }
+    /// → (url, auto, instructions)
+    pub async fn oauth_authorize(&self, provider: &str, method: usize) -> Result<(String, bool, String)> {
+        let v = self.post(&format!("/provider/{provider}/oauth/authorize"), json!({ "method": method })).await?;
+        let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        Ok((s("url"), s("method") == "auto", s("instructions")))
+    }
+    pub async fn oauth_callback(&self, provider: &str, method: usize, code: Option<String>) -> Result<()> {
+        let mut body = json!({ "method": method });
+        if let Some(code) = code {
+            body["code"] = json!(code);
+        }
+        self.post(&format!("/provider/{provider}/oauth/callback"), body).await.map(|_| ())
+    }
+    /// T22: token usage per day since installation.
+    pub async fn usage(&self) -> Result<crate::usage::Usage> {
+        self.get("/experimental/aioven/usage").await
     }
     pub async fn abort(&self, id: &str) -> Result<()> {
         self.post(&format!("/session/{id}/abort"), json!({})).await.map(|_| ())

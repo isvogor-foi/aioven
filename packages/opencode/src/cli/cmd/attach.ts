@@ -1,8 +1,6 @@
 import { cmd } from "./cmd"
 import { UI } from "@/cli/ui"
-import { errorMessage } from "@opencode-ai/tui/util/error"
-import { validateSession } from "../tui/validate-session"
-import { ServerAuth } from "@/server/auth"
+import { launchRustTui } from "./rust-tui"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -103,46 +101,11 @@ export const AttachCommand = cmd({
       process.exitCode = 1
       return
     }
-
-    const { TuiConfig } = await import("@/config/tui")
-    if (args.fork && !args.continue && !args.session) {
-      UI.error("--fork requires --continue or --session")
-      process.exitCode = 1
-      return
-    }
-
-    const headers = ServerAuth.headers({ password: args.password, username: args.username })
-    const config = await TuiConfig.get()
-
-    try {
-      await validateSession({
-        url: args.url,
-        sessionID: args.session,
-        directory,
-        headers,
-      })
-    } catch (error) {
-      UI.error(errorMessage(error))
-      process.exitCode = 1
-      return
-    }
-
-    const { Effect } = await import("effect")
-    const { run } = await import("../tui/layer")
-    const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-    await Effect.runPromise(
-      run({
-        url: args.url,
-        config,
-        pluginHost: createLegacyTuiPluginHost(),
-        args: {
-          continue: args.continue,
-          sessionID: args.session,
-          fork: args.fork,
-        },
-        directory,
-        headers,
-      }),
-    )
+    // T21: full-screen attach = Ratatui client
+    const forward = ["--attach", args.url]
+    if (directory) forward.unshift(directory)
+    if (args.session) forward.push("-s", args.session)
+    if (args.continue) forward.push("-c")
+    await launchRustTui(forward)
   },
 })

@@ -8,6 +8,8 @@ pub enum Item {
     Blueprint,
     StopAll,
     Background,
+    Connect,
+    Usage,
     Quit,
 }
 
@@ -28,6 +30,8 @@ pub fn items(ctx: &Context) -> Vec<(String, Item)> {
             Item::Detail(!ctx.compact),
         ),
         ("Open blueprint".into(), Item::Blueprint),
+        ("Connect provider…".into(), Item::Connect),
+        ("Usage stats (heat map)".into(), Item::Usage),
         ("Move running tasks to background".into(), Item::Background),
         ("Stop all agents".into(), Item::StopAll),
         ("Quit".into(), Item::Quit),

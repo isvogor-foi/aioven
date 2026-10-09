@@ -25,6 +25,26 @@ const ConsoleStateResponse = Schema.Struct({
   switchableOrgCount: NonNegativeInt,
 }).annotate({ identifier: "ConsoleState" })
 
+// T22 AIOven usage stats
+export const AIOvenUsageQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  from: Schema.optional(Schema.String),
+})
+const AIOvenUsageDay = Schema.Struct({
+  day: Schema.String,
+  input: Schema.Finite,
+  output: Schema.Finite,
+  reasoning: Schema.Finite,
+  cacheRead: Schema.Finite,
+  cacheWrite: Schema.Finite,
+  cost: Schema.Finite,
+  messages: Schema.Finite,
+}).annotate({ identifier: "AIOvenUsageDay" })
+const AIOvenUsageResponse = Schema.Struct({
+  first: Schema.optionalKey(Schema.String),
+  days: Schema.mutable(Schema.Array(AIOvenUsageDay)),
+}).annotate({ identifier: "AIOvenUsage" })
+
 const CapabilitiesResponse = Schema.Struct({
   backgroundSubagents: Schema.Boolean,
 }).annotate({ identifier: "ExperimentalCapabilities" })
@@ -89,6 +109,7 @@ export const SessionListQuery = Schema.Struct({
 
 export const ExperimentalPaths = {
   capabilities: "/experimental/capabilities",
+  aiovenUsage: "/experimental/aioven/usage",
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
   consoleSwitch: "/experimental/console/switch",
@@ -113,6 +134,16 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "experimental.capabilities.get",
             summary: "Get experimental capabilities",
             description: "Get experimental features enabled on the OpenCode server.",
+          }),
+        ),
+        HttpApiEndpoint.get("aiovenUsage", ExperimentalPaths.aiovenUsage, {
+          query: AIOvenUsageQuery,
+          success: described(AIOvenUsageResponse, "Token usage per day since installation"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.aioven.usage",
+            summary: "AIOven usage",
+            description: "Token usage and cost per local day across all sessions (AIOven usage page).",
           }),
         ),
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {

@@ -8,6 +8,7 @@ mod brand;
 mod budget;
 mod compact;
 mod complete;
+mod connect;
 mod derive;
 mod events;
 mod keys;
@@ -17,6 +18,7 @@ mod plan_model;
 mod server;
 mod store;
 mod types;
+mod usage;
 mod ui;
 
 use std::io::stdout;
@@ -44,25 +46,38 @@ struct Args {
     project: PathBuf,
     session: Option<String>,
     attach: Option<url::Url>,
+    continue_last: bool,
+    model: Option<(String, String)>,
+    agent: Option<String>,
+    prompt: Option<String>,
 }
 
 fn parse_args() -> Result<Args> {
     let mut project = std::env::current_dir()?;
     let mut session = None;
     let mut attach = None;
+    let (mut continue_last, mut model, mut agent, mut prompt) = (false, None, None, None);
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
             "-s" | "--session" => session = it.next(),
             "--attach" => attach = Some(url::Url::parse(&it.next().context("--attach needs a url")?)?),
+            "-c" | "--continue" => continue_last = true,
+            "-m" | "--model" => {
+                let m = it.next().context("--model needs provider/model")?;
+                let (p, id) = m.split_once('/').context("--model must be provider/model")?;
+                model = Some((p.to_string(), id.to_string()));
+            }
+            "--agent" => agent = it.next(),
+            "--prompt" => prompt = it.next(),
             "-h" | "--help" => {
-                println!("aioven-tui [project-dir] [-s <session-id>] [--attach <url>]");
+                println!("aioven-tui [project-dir] [-s <session-id> | -c] [--attach <url>] [--model provider/model] [--agent name] [--prompt text]");
                 std::process::exit(0);
             }
             other => project = std::fs::canonicalize(other).with_context(|| format!("no such directory: {other}"))?,
         }
     }
-    Ok(Args { project, session, attach })
+    Ok(Args { project, session, attach, continue_last, model, agent, prompt })
 }
 
 #[tokio::main]
@@ -74,12 +89,18 @@ async fn main() -> Result<()> {
     };
     let api = Api::new(server.base_url.clone(), server.directory.to_string_lossy().to_string());
 
-    let root = match &args.session {
-        Some(id) => api.session(id).await.with_context(|| format!("session {id} not found"))?,
-        None => api.session_create().await.context("could not create a session")?,
+    let latest = if args.continue_last && args.session.is_none() { api.latest_session().await.ok().flatten() } else { None };
+    let root = match (&args.session, latest) {
+        (Some(id), _) => api.session(id).await.with_context(|| format!("session {id} not found"))?,
+        (None, Some(s)) => s,
+        (None, None) => api.session_create().await.context("could not create a session")?,
     };
     let (net_tx, mut net_rx) = mpsc::unbounded_channel::<NetMsg>();
     let mut app = App::new(api.clone(), root, net_tx);
+    if let Some(a) = args.agent {
+        app.agent = a;
+    }
+    app.model = args.model;
     app.store.agents = api.agents().await.unwrap_or_default();
     app.store.skills = api.skills().await.unwrap_or_default();
     app.store.config = api.config().await.unwrap_or_default();
@@ -89,7 +110,12 @@ async fn main() -> Result<()> {
     app.load_children();
     app.refresh_recipe();
     app.load_meta();
+    app.load_pending();
     let mut stream = events::subscribe(&api);
+    if let Some(text) = args.prompt {
+        app.input.insert_str(&text);
+        app.update(keys::Action::Send);
+    }
 
     enable_raw_mode()?;
     let mut out = stdout();
@@ -164,7 +190,10 @@ async fn run(
             }
             Some(msg) = stream.recv() => match msg {
                 StreamMsg::Event(e) => app.on_event(e),
-                StreamMsg::Connected => app.notice = None,
+                StreamMsg::Connected => {
+                    app.notice = None;
+                    app.load_pending();
+                }
                 StreamMsg::Disconnected(e) => app.notice = Some(format!("reconnecting… {e}")),
             },
             Some(msg) = net_rx.recv() => app.on_net(msg),

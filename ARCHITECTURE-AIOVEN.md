@@ -699,3 +699,68 @@ tmux takes Ctrl+B as its prefix.
 - Blueprint toggle = **Ctrl+G** (and Alt+B).
 - Background stays on Ctrl+B (press it twice inside tmux) and is also in the Ctrl+P menu.
 - The hints and AIOVEN.md show Ctrl+G.
+
+---
+
+# T18–T23 — design (2026-10-09, awaiting confirmation)
+
+Finding: "submitting does nothing" was a hidden error. The Gemini free tier is exhausted (20 requests/day), so the server keeps retrying, and the Ratatui client only showed a truncated `retr…`. The prompt itself was sent.
+
+| # | Todo | Components |
+|---|---|---|
+| T18 | Make failures visible | `derive.rs` (wait labels), `ui/chat.rs`, `ui/status.rs`, `app.rs` |
+| T19 | Restore Connect (provider login) in the new TUI | `api.rs`, new `connect.rs` (pure flow), `ui/connect.rs`, `menu.rs`, `app.rs` |
+| T20 | Permission + question dialogs, verified end-to-end | `store.rs` (initial load), `api.rs`, `ui/dialogs.rs`, fake-model check |
+| T21 | Remove the old UI | `bin/aioven`, `opencode/src/cli/cmd/tui.ts`, `attach.ts`, `cli/tui/*`, dead `packages/tui` app code |
+| T22 | Usage stats page (since install, daily heat map, month, year) | server: new `aioven/usage.ts` + route `GET /experimental/aioven/usage`; client: `api.rs`, `usage.rs` (pure), `ui/usage.rs`, tab `U` |
+
+## Interfaces
+
+```rust
+// T18
+Wait::Retry { attempt, next, message }                // message kept; label: "retry #2 in 20h34m: quota exceeded…"
+// chat: a red "↻ retrying: <message>" / "✗ burnt: <message>" line under the turn; status line shows the full message
+// as a notice. Errors from Api calls already go to the notice; they now also stay visible for 10 s.
+
+// T19 connect.rs — pure state machine
+enum Step { Pick { query }, Method { provider, methods }, Prompts { .. }, ApiKey { provider, key }, Oauth { provider, url, instructions, code }, Done }
+Api::auth_methods() -> HashMap<provider, Vec<AuthMethod>>        // GET /provider/auth
+Api::set_api_key(provider, key)                                    // PUT /auth/{provider}  { type: "api", key }
+Api::oauth_authorize(provider, method, inputs) -> Authorization    // POST /provider/{id}/oauth/authorize → { url, method: auto|code, instructions }
+Api::oauth_callback(provider, method, code?)                       // POST /provider/{id}/oauth/callback
+// UI: Ctrl+P → "Connect provider…" (and /connect in the input). It is a list → method → key or OAuth URL (+ code) popup.
+// After success the models are reloaded.
+
+// T20
+Api::permissions() / Api::questions()                              // GET /permission, GET /question (requests pending before the client started)
+// The dialogs already exist and are driven by the store. T20 adds the initial load plus a live check: a fake model asks for
+// bash (permission) and calls the question tool; y/a/n and ↑↓⏎ are verified.
+
+// T21
+// `aioven [project]`, `aioven -s`, `aioven attach <url>` → exec aioven-tui (the CLI default command, the `tui` and `attach`
+// commands, and the launcher; AIOVEN_TUI=old is removed).
+// The OpenTUI interactive app (packages/tui: app.tsx, routes/, interactive-only components and plugin slots) is deleted.
+// Kept: the parts run mode and the CLI import (config, keymap, brand, logo, theme, util, editor, spinner, prompt display).
+// An import-graph check decides each file.
+
+// T22 server: opencode/src/aioven/usage.ts
+type Day = { day: "YYYY-MM-DD"; input; output; reasoning; cache_read; cache_write; cost; messages }
+function daily(db, from?: Date): Day[]          // SQL aggregate over assistant messages, grouped by local day
+GET /experimental/aioven/usage?from=YYYY-MM-DD → { days: Day[], first: "YYYY-MM-DD" }   // first = installation (first message)
+// client usage.rs (pure): year_grid(days, year) -> 53×7 cells with level 0–4; month_totals(days); summary(days)
+// ui/usage.rs: "U usage" tab
+//   - GitHub-style heat map of tokens per day for the selected year (←/→ year);
+//   - a bar per month (12 rows);
+//   - totals since install: tokens, cost, messages, busiest day.
+// Ctrl+U or Ctrl+P → "Usage stats".
+```
+
+## T18–T22 status (2026-10-09)
+- **T18 errors:** verified live with a fake 429 provider. The chat shows `↻ retry #3 in 9s: You exceeded your current quota…`, and so does the status line.
+- **T20 dialogs:** verified live with a fake tool-calling model: permission (y) → bash ran → question (↓⏎) → final answer. Pending requests now load at start and on reconnect.
+- **T19 connect:** the API-key flow was verified live in an isolated data directory. OAuth is unit-tested only; a live run would open a browser.
+- **T22 usage:** the endpoint was verified on a copy of real history (138 active days since 2026-04-28), and the heat-map page rendered.
+- **T21 old UI removed:**
+  - The CLI default command and `attach` start the Ratatui client (`cli/cmd/rust-tui.ts`); `--mini` and `run` stay on run mode.
+  - Deleted: 138 unreachable `packages/tui` files (found by an import-graph walk from the remaining users), `cli/tui/*`, `plugin/tui/*`, and the tests that only covered them.
+  - Kept: the library run mode needs (brand, config, keymap, theme, prompt, util, editor, parsers-config).

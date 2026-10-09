@@ -8,18 +8,11 @@ import { TuiThreadCommand, resolveThreadDirectory } from "../../../src/cli/cmd/t
 import { cliIt } from "../../lib/cli-process"
 
 describe("tui thread", () => {
-  test("loads the TUI integration lazily", async () => {
+  test("starts the Ratatui client for the full-screen TUI", async () => {
     const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
 
-    expect(source).toContain('await import("../tui/layer")')
-    expect(source).toMatch(/await import\(["']@\/plugin\/tui\/runtime["']\)/)
-    expect(source).not.toContain('import("./app")')
-  })
-
-  test("forwards the CLI environment to the TUI worker", async () => {
-    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
-
-    expect(source).toMatch(/new Worker\(file, \{\s*env: Object\.fromEntries\(\s*Object\.entries\(process\.env\)/)
+    expect(source).toContain("await launchRustTui(forward)")
+    expect(source).not.toContain("new Worker(")
   })
 
   async function check(project?: string) {

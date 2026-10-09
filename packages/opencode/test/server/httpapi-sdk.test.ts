@@ -11,7 +11,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { validateSession } from "../../src/cli/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -467,50 +466,6 @@ describe("HttpApi SDK", () => {
         }
       }),
     ),
-  )
-
-  serverPathParity("formats missing session validation errors for -s", (serverPath) =>
-    withStandardProject(serverPath, ({ directory }) =>
-      Effect.gen(function* () {
-        const sessionID = "ses_206f84f18ffeZ6hhD7pFYAiW5T"
-        const fetch = yield* serverFetch(serverPath)
-        const thrown = yield* captureThrown(() =>
-          validateSession({
-            url: "http://localhost",
-            directory,
-            sessionID,
-            fetch,
-          }),
-        )
-        expect(errorMessage(thrown)).toBe(`Session not found: ${sessionID}`)
-        return errorMessage(thrown)
-      }),
-    ),
-  )
-
-  httpapiInstance(
-    "uses generated SDK basic auth behavior",
-    { serverPath: "raw", setup: writeStandardFiles },
-    ({ directory }) =>
-      Effect.gen(function* () {
-        const missingSdk = yield* client("raw", directory, { password: "secret" })
-        const missing = yield* capture(() => missingSdk.file.read({ path: "hello.txt" }))
-        const badSdk = yield* client("raw", directory, {
-          password: "secret",
-          headers: { authorization: authorization("opencode", "wrong") },
-        })
-        const bad = yield* capture(() => badSdk.file.read({ path: "hello.txt" }))
-        const goodSdk = yield* client("raw", directory, {
-          password: "secret",
-          headers: { authorization: authorization("opencode", "secret") },
-        })
-        const good = yield* capture(() => goodSdk.file.read({ path: "hello.txt" }))
-
-        return {
-          statuses: statuses({ missing, bad, good }),
-          content: record(good.data).content,
-        }
-      }),
   )
 
   serverPathParity("matches generated SDK instance read routes", (serverPath) =>

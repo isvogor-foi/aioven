@@ -7,6 +7,7 @@ mod popups;
 mod sidebar;
 mod status;
 mod top_bar;
+mod usage;
 pub mod ticker;
 
 use ratatui::Frame;
@@ -84,12 +85,14 @@ pub fn render(f: &mut Frame, app: &mut App) {
         }
         View::Blueprint => blueprint::render(f, body[0], app),
         View::Skill(name) => blueprint::render_skill(f, body[0], app, name),
+        View::Usage => usage::render(f, body[0], app),
     }
     sidebar::render(f, body[1], app);
     render_input(f, rows[2], app);
     status::render(f, rows[3], app);
     popups::render_completion(f, rows[2], app);
     popups::render_menu(f, f.area(), app);
+    popups::render_connect(f, f.area(), app);
     dialogs::render(f, f.area(), app);
 }
 

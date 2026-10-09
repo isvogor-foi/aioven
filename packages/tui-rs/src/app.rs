@@ -10,6 +10,7 @@ use crate::api::Api;
 use crate::derive::{self, Wait};
 use crate::complete::{self, Entry};
 use crate::keys::{Action, Focus, KeyContext, Modal, Pane, Popup};
+use crate::connect::{self, Effect, Step};
 use crate::menu::{self, Item};
 use crate::store::{self, Store};
 use crate::types::*;
@@ -19,6 +20,7 @@ pub enum View {
     Chat,
     Blueprint,
     Skill(String),
+    Usage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +38,11 @@ pub enum NetMsg {
     Commands(Vec<Entry>),
     Models(Vec<(String, String, String)>),
     Notice(String),
+    Pending { permissions: Vec<PermissionRequest>, questions: Vec<QuestionRequest> },
+    ConnectData { providers: Vec<connect::ProviderChoice>, methods: std::collections::HashMap<String, Vec<connect::Method>> },
+    ConnectStep(Step),
+    Connected(String),
+    Usage(crate::usage::Usage),
     Error(String),
 }
 
@@ -59,6 +66,11 @@ pub struct App {
     pub now: i64,
     pub focus: Focus,
     pub menu_open: bool,
+    pub usage: Option<crate::usage::Usage>,
+    pub usage_year: i64,
+    pub connect: Option<Step>,
+    pub connect_providers: Vec<connect::ProviderChoice>,
+    connect_methods: std::collections::HashMap<String, Vec<connect::Method>>,
     pub menu_query: String,
     pub popup_sel: usize,
     complete_dismissed: Option<String>,
@@ -106,6 +118,11 @@ impl App {
             now: now_ms(),
             focus: Focus::Input,
             menu_open: false,
+            usage: None,
+            usage_year: 0,
+            connect: None,
+            connect_providers: Vec::new(),
+            connect_methods: Default::default(),
             menu_query: String::new(),
             popup_sel: 0,
             complete_dismissed: None,
@@ -145,14 +162,16 @@ impl App {
         } else {
             Modal::None
         };
-        let popup = if self.menu_open {
+        let popup = if self.connect.is_some() {
+            Popup::Connect
+        } else if self.menu_open {
             Popup::Menu
         } else if !self.completions().is_empty() {
             Popup::Complete
         } else {
             Popup::None
         };
-        KeyContext { modal, in_chat: self.view == View::Chat, focus: self.focus, popup }
+        KeyContext { modal, in_chat: self.view == View::Chat, focus: self.focus, popup, usage: self.view == View::Usage }
     }
 
     pub fn input_text(&self) -> String {
@@ -201,6 +220,16 @@ impl App {
         self.out_chars.get(&last.id).map(|c| c / 4).filter(|t| *t > 0)
     }
 
+    /// Permission/question requests that were already waiting (e.g. after a restart or reconnect).
+    pub fn load_pending(&self) {
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            let permissions = api.permissions().await.unwrap_or_default();
+            let questions = api.questions().await.unwrap_or_default();
+            let _ = tx.send(NetMsg::Pending { permissions, questions });
+        });
+    }
+
     pub fn load_meta(&self) {
         let (api, tx) = (self.api.clone(), self.tx.clone());
         tokio::spawn(async move {
@@ -243,6 +272,77 @@ impl App {
         self.spawn(async move { api.command(&root, &name, &args, &agent).await });
     }
 
+    pub fn open_connect(&mut self) {
+        self.menu_open = false;
+        self.connect = Some(Step::Pick { query: String::new(), sel: 0 });
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            let providers = api.provider_choices().await.unwrap_or_default();
+            let methods = api.auth_methods().await.unwrap_or_default();
+            let _ = tx.send(NetMsg::ConnectData { providers, methods });
+        });
+    }
+
+    fn connect_input(&mut self, input: connect::Input) {
+        let Some(step) = self.connect.take() else { return };
+        let methods = self.connect_methods.clone();
+        let (step, effect) = connect::next(step, input, &self.connect_providers, |id| methods.get(id).cloned().unwrap_or_default());
+        let name = |id: &str| self.connect_providers.iter().find(|p| p.id == id).map(|p| p.name.clone()).unwrap_or_else(|| id.to_string());
+        self.connect = Some(step);
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        match effect {
+            Effect::None => {}
+            Effect::SetKey { provider, key } => {
+                let label = name(&provider);
+                tokio::spawn(async move {
+                    let _ = tx.send(match api.set_api_key(&provider, &key).await {
+                        Ok(()) => NetMsg::Connected(label),
+                        Err(e) => NetMsg::ConnectStep(Step::Busy(format!("failed: {e:#} (esc)"))),
+                    });
+                });
+            }
+            Effect::Authorize { provider, method } => {
+                let choice = self.connect_providers.iter().find(|p| p.id == provider).cloned().unwrap_or(connect::ProviderChoice {
+                    id: provider.clone(),
+                    name: provider.clone(),
+                    connected: false,
+                });
+                tokio::spawn(async move {
+                    match api.oauth_authorize(&provider, method).await {
+                        Ok((url, auto, instructions)) => {
+                            let _ = std::process::Command::new("xdg-open")
+                                .arg(&url)
+                                .stdout(std::process::Stdio::null())
+                                .stderr(std::process::Stdio::null())
+                                .spawn();
+                            let label = choice.name.clone();
+                            let _ = tx.send(NetMsg::ConnectStep(Step::Oauth { provider: choice, method, url, auto, instructions, code: String::new() }));
+                            if auto {
+                                // auto methods finish once the browser login completes
+                                let _ = tx.send(match api.oauth_callback(&provider, method, None).await {
+                                    Ok(()) => NetMsg::Connected(label),
+                                    Err(e) => NetMsg::ConnectStep(Step::Busy(format!("failed: {e:#} (esc)"))),
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(NetMsg::ConnectStep(Step::Busy(format!("failed: {e:#} (esc)"))));
+                        }
+                    }
+                });
+            }
+            Effect::Callback { provider, method, code } => {
+                let label = name(&provider);
+                tokio::spawn(async move {
+                    let _ = tx.send(match api.oauth_callback(&provider, method, code).await {
+                        Ok(()) => NetMsg::Connected(label),
+                        Err(e) => NetMsg::ConnectStep(Step::Busy(format!("failed: {e:#} (esc)"))),
+                    });
+                });
+            }
+        }
+    }
+
     fn apply_menu(&mut self, item: Item) {
         self.menu_open = false;
         match item {
@@ -255,6 +355,8 @@ impl App {
             Item::Blueprint => self.update(Action::Blueprint),
             Item::StopAll => self.update(Action::StopAll),
             Item::Background => self.update(Action::Background),
+            Item::Connect => self.open_connect(),
+            Item::Usage => self.update(Action::Usage),
             Item::Quit => self.quit = true,
         }
     }
@@ -355,9 +457,42 @@ impl App {
                 self.store.diffs.insert(session, diff);
             }
             NetMsg::Recipe(md) => self.recipe = md,
-            NetMsg::Commands(c) => self.commands = c,
+            NetMsg::Commands(mut c) => {
+                // client-side command: provider login
+                c.push(Entry { name: "connect".into(), description: "log in to a model provider".into(), skill: false });
+                self.commands = c;
+            }
             NetMsg::Models(m) => self.models = m,
             NetMsg::Notice(n) => self.notice = Some(n),
+            NetMsg::ConnectData { providers, methods } => {
+                self.connect_providers = providers;
+                self.connect_methods = methods;
+            }
+            NetMsg::ConnectStep(step) => {
+                if self.connect.is_some() {
+                    self.connect = Some(step);
+                }
+            }
+            NetMsg::Usage(u) => {
+                if self.usage_year == 0 {
+                    self.usage_year = u.days.last().and_then(|d| crate::usage::parse(&d.day)).map(|(y, _, _)| y).unwrap_or(1970);
+                }
+                self.usage = Some(u);
+            }
+            NetMsg::Connected(name) => {
+                self.connect = None;
+                self.notice = Some(format!("connected {name} — pick a model with ctrl+p"));
+                self.models.clear();
+                self.load_meta();
+            }
+            NetMsg::Pending { permissions, questions } => {
+                for p in permissions {
+                    store::apply(&mut self.store, Event::PermissionAsked(p));
+                }
+                for q in questions {
+                    store::apply(&mut self.store, Event::QuestionAsked(q));
+                }
+            }
             NetMsg::Error(e) => self.notice = Some(e),
         }
         self.follow_children();
@@ -421,6 +556,10 @@ impl App {
                 let text = self.input_text();
                 if text.trim().is_empty() {
                     return;
+                }
+                if text.trim() == "/connect" || text.trim() == "\\connect" {
+                    self.reset_input();
+                    return self.open_connect();
                 }
                 if let Some((name, args)) = complete::split(&text) {
                     if self.commands.iter().any(|c| c.name == name) {
@@ -517,6 +656,17 @@ impl App {
                     let _ = tx.send(msg);
                 });
             }
+            Action::Usage => {
+                self.view = if self.view == View::Usage { View::Chat } else { View::Usage };
+                let (api, tx) = (self.api.clone(), self.tx.clone());
+                tokio::spawn(async move {
+                    let _ = tx.send(match api.usage().await {
+                        Ok(u) => NetMsg::Usage(u),
+                        Err(e) => NetMsg::Error(format!("usage: {e:#}")),
+                    });
+                });
+            }
+            Action::Year(d) => self.usage_year += d as i64,
             Action::OpenMenu => {
                 self.menu_open = true;
                 self.menu_query.clear();
@@ -537,6 +687,17 @@ impl App {
             Action::Scroll(Pane::Files, d) => self.files_scroll = (self.files_scroll as i32 + d as i32).clamp(0, 10_000) as u16,
             Action::ScrollEdge(Pane::Chat, top) => self.chat_scroll = if top { 10_000 } else { 0 },
             Action::ScrollEdge(Pane::Files, top) => self.files_scroll = if top { 0 } else { 10_000 },
+            Action::PopupMove(d) if self.connect.is_some() => self.connect_input(connect::Input::Move(d)),
+            Action::PopupAccept if self.connect.is_some() => self.connect_input(connect::Input::Enter),
+            Action::PopupClose if self.connect.is_some() => self.connect = None,
+            Action::MenuInput(key) if self.connect.is_some() => {
+                use crossterm::event::KeyCode;
+                match key.code {
+                    KeyCode::Char(c) => self.connect_input(connect::Input::Char(c)),
+                    KeyCode::Backspace => self.connect_input(connect::Input::Backspace),
+                    _ => {}
+                }
+            }
             Action::PopupMove(d) => {
                 let n = if self.menu_open { self.menu_visible().len() } else { self.completions().len() };
                 if n > 0 {
@@ -555,6 +716,10 @@ impl App {
                         self.apply_menu(item);
                     }
                 } else if let Some(name) = self.completions().get(self.popup_sel).map(|e| e.name.clone()) {
+                    if name == "connect" {
+                        self.reset_input();
+                        return self.open_connect();
+                    }
                     let args = complete::split(&self.input_text()).map(|(_, a)| a.to_string()).unwrap_or_default();
                     self.run_command(name, args);
                 }

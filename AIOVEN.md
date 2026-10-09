@@ -6,9 +6,11 @@ Run it with `aioven [project-path]` (or `bun dev` inside this repo).
 
 ## Screen (Ratatui client, default)
 
-`aioven` starts the Ratatui client (`packages/tui-rs`). `AIOVEN_TUI=old aioven` starts the previous OpenTUI interface.
+`aioven` starts the Ratatui client (`packages/tui-rs`); the old OpenTUI interface was removed. `aioven run "…"` (one-shot, scripts) and `aioven --mini` still use run mode.
 
-- **Top bar:** one tab per agent (`0` = main, `1`–`9` = subagents) with live status, then the skills used in the session, then `B blueprint`.
+Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|recipe] [--prompt text]`, `aioven attach <url>`.
+
+- **Top bar:** one tab per agent (`0` = main, `1`–`9` = subagents) with live status, then the skills used in the session, then `U usage` and `B blueprint`.
 - **Middle:** the blueprint on top (recipe components, their interfaces, changed files, communication), chat of the selected tab below. Tool calls show as one line each.
 - **Sidebar:** tokens burned per agent against its budget, total and cache hit, running tasks, recipe progress and ETA.
 - **Bottom:** the input box (shows the current main agent) and a status line.
@@ -21,7 +23,9 @@ Run it with `aioven [project-path]` (or `bun dev` inside this repo).
 | Shift+Enter / Alt+Enter | send |
 | Ctrl+0–9 (or Alt+0–9) | open tab N; never types into the input |
 | `/` or `\` at line start | skills (✦) and commands; ↑↓ choose, Tab complete, Enter run, Esc close |
-| Ctrl+P | menu: model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
+| `/connect` | log in to a model provider (API key or browser login) |
+| Ctrl+U | usage page: heat map of tokens per day for a year (←/→), monthly bars, totals since install |
+| Ctrl+P | menu: connect provider, usage stats, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
 | Ctrl+B | move running foreground subagents to the background (inside tmux press Ctrl+B twice, or use the Ctrl+P menu) |
 | Ctrl+↑ | focus chat, then blueprint (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
 | Mouse wheel | scroll chat or blueprint under the pointer |
@@ -60,6 +64,7 @@ If your terminal can't tell Shift+Enter apart from Enter, use Alt+Enter to send.
 
 ## Built-in behaviour
 
+- **Errors stay visible:** when the model fails (quota, auth, network) the chat and the status line show the reason, e.g. `↻ retry #2 in 20h: You exceeded your current quota…`.
 - **Caveman ultra** is the default writing style for every agent, helpers included. Set `aioven.terse` to `full`, `lite` or `off` to change it.
 - **Components first:** bake names the components, interfaces and communication before editing, and writes a short design when there is no recipe. Taster checks code against the recipe's interfaces first; those findings are marked `[interface]`.
 

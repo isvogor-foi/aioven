@@ -16,7 +16,7 @@ pub enum Wait {
     Permission(String),
     Question,
     Compacting,
-    Retry { attempt: i64, next: i64 },
+    Retry { attempt: i64, next: i64, message: String },
     Subagent { since: i64 },
     Tool { name: String, since: i64 },
     Model { since: i64 },
@@ -112,14 +112,19 @@ pub fn model_name(store: &Store, session: &str) -> Option<String> {
     store.messages(session).iter().rev().find_map(|m| m.assistant().map(|a| a.model_id.clone()))
 }
 
+/// First meaningful line of a provider message (they can be long multi-line blobs).
+pub fn first_line(text: &str) -> String {
+    text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("").to_string()
+}
+
 fn error_message(error: &Value) -> String {
     error
         .get("data")
         .and_then(|d| d.get("message"))
         .and_then(Value::as_str)
         .or_else(|| error.get("name").and_then(Value::as_str))
-        .unwrap_or("error")
-        .to_string()
+        .map(first_line)
+        .unwrap_or_else(|| "error".into())
 }
 
 pub fn wait_of(store: &Store, session: &str) -> Wait {
@@ -136,7 +141,9 @@ pub fn wait_of(store: &Store, session: &str) -> Wait {
     let messages = store.messages(session);
     let last = messages.last();
     match store.status.get(session) {
-        Some(SessionStatus::Retry { attempt, next, .. }) => return Wait::Retry { attempt: *attempt, next: *next },
+        Some(SessionStatus::Retry { attempt, next, message }) => {
+            return Wait::Retry { attempt: *attempt, next: *next, message: first_line(message) };
+        }
         None | Some(SessionStatus::Idle) => {
             if let Some(Message::Assistant(a)) = last {
                 if let Some(err) = &a.error {
@@ -294,7 +301,7 @@ pub fn label(w: &Wait, now: i64) -> String {
         Wait::Permission(p) => format!("needs permission: {p}"),
         Wait::Question => "waiting for your answer".into(),
         Wait::Compacting => "compacting context".into(),
-        Wait::Retry { attempt, next } => format!("retry #{attempt} in {}", seconds(next - now)),
+        Wait::Retry { attempt, next, message } => format!("retry #{attempt} in {}: {message}", seconds(next - now)),
         Wait::Subagent { since } => format!("waiting on subagent {}", seconds(now - since)),
         Wait::Tool { name, since } => format!("tool:{name} {}", seconds(now - since)),
         Wait::Model { since } => format!("preheating {}", seconds(now - since)),
@@ -386,5 +393,7 @@ mod tests {
         assert_eq!(seconds(125_000), "2m5s");
         assert_eq!(label(&Wait::Done, 0), "baked");
         assert_eq!(label(&Wait::Interrupted, 0), "pulled out");
+        let w = Wait::Retry { attempt: 2, next: 5_000, message: first_line("\n  You exceeded your quota\n details") };
+        assert_eq!(label(&w, 0), "retry #2 in 5s: You exceeded your quota");
     }
 }

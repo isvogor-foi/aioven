@@ -86,7 +86,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let skills_text = if skills.is_empty() { String::new() } else { format!(" ┆ skills: {} ", skills.join(" · ")) };
     let (done, total) = crate::ui::blueprint::progress(app);
     let blueprint = if total > 0 { format!(" B blueprint {done}/{total} ") } else { " B blueprint ".to_string() };
-    let room = (area.width as usize).saturating_sub(blueprint.chars().count() + skills_text.chars().count() + 1);
+    let usage_tab = " U usage ";
+    let room = (area.width as usize).saturating_sub(blueprint.chars().count() + skills_text.chars().count() + 11);
     let fitted = fit_tabs(&tabs, room);
 
     let mut spans: Vec<Span> = Vec::new();
@@ -113,8 +114,13 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         let active = matches!(app.view, View::Skill(_));
         spans.push(Span::styled(skills_text.clone(), Style::default().fg(if active { Theme::AQUA } else { Theme::MUTED })));
     }
-    let pad = (area.width as usize).saturating_sub(used + skills_text.chars().count() + blueprint.chars().count());
+    let pad = (area.width as usize).saturating_sub(used + skills_text.chars().count() + blueprint.chars().count() + usage_tab.len() - 1);
     spans.push(Span::raw(" ".repeat(pad)));
+    let usage_active = app.view == View::Usage;
+    spans.push(Span::styled(
+        usage_tab,
+        if usage_active { Style::default().bg(Theme::SELECTED).fg(Theme::TEXT).add_modifier(Modifier::BOLD) } else { Style::default().fg(Theme::BLUE) },
+    ));
     let bp_active = app.view == View::Blueprint;
     spans.push(Span::styled(
         blueprint,
