@@ -135,3 +135,38 @@ pub fn render_connect(f: &mut Frame, area: Rect, app: &App) {
         rect,
     );
 }
+
+/// T23 sessions popup: "+ New session" then past sessions (title · age · tokens).
+pub fn render_sessions(f: &mut Frame, area: Rect, app: &App) {
+    let Some((query, sel)) = &app.sessions_popup else { return };
+    let list = app.sessions_visible();
+    let rect = centered(area, 80, 20);
+    let inner = rect.width.saturating_sub(2) as usize;
+    let shown = 15usize;
+    let mut lines = vec![
+        Line::from(vec![Span::styled("› ", Style::default().fg(Theme::AQUA)), Span::styled(query.clone(), Theme::text()), Span::styled("▏", Style::default().fg(Theme::AQUA))]),
+        Line::from(Span::styled("─".repeat(inner), Style::default().fg(Theme::DIM))),
+    ];
+    let start = sel.saturating_sub(shown - 1);
+    let age = |ms: i64| {
+        let d = (app.now - ms).max(0);
+        if d >= 48 * 3_600_000 { format!("{}d", d / 86_400_000) } else { crate::derive::seconds(d) }
+    };
+    let rows: Vec<(String, String)> = std::iter::once(("+ New session".to_string(), String::new()))
+        .chain(list.iter().map(|s| {
+            let tok = s.tokens.as_ref().map(|t| t.input + t.output + t.reasoning).unwrap_or(0.0);
+            (if s.title.is_empty() { s.id.clone() } else { s.title.clone() }, format!("{} ago · {}", age(s.time.updated), crate::derive::tokens(tok)))
+        }))
+        .collect();
+    for (i, (left, right)) in rows.iter().enumerate().skip(start).take(shown) {
+        lines.push(row(i == *sel, left.clone(), right.clone(), inner));
+    }
+    if app.session_list.is_empty() {
+        lines.push(Line::from(Span::styled("  loading sessions…", Theme::muted())));
+    }
+    f.render_widget(Clear, rect);
+    f.render_widget(
+        Paragraph::new(lines).block(panel("SESSIONS · type to filter · ⏎ open · esc close").border_style(Style::default().fg(Theme::BLUE)).style(Style::default().bg(Theme::PANEL))),
+        rect,
+    );
+}

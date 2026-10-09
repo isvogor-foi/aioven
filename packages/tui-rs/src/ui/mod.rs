@@ -93,6 +93,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     popups::render_completion(f, rows[2], app);
     popups::render_menu(f, f.area(), app);
     popups::render_connect(f, f.area(), app);
+    popups::render_sessions(f, f.area(), app);
     dialogs::render(f, f.area(), app);
 }
 

@@ -170,6 +170,19 @@ impl Api {
     pub async fn usage(&self) -> Result<crate::usage::Usage> {
         self.get("/experimental/aioven/usage").await
     }
+    /// T23: root sessions of the project, newest first.
+    pub async fn sessions(&self) -> Result<Vec<Session>> {
+        let mut list: Vec<Session> = self.get("/session?roots=true&limit=200").await?;
+        list.retain(|s| s.parent_id.is_none());
+        list.sort_by_key(|s| std::cmp::Reverse(s.time.updated));
+        Ok(list)
+    }
+    /// T24/T25: deep-merge a patch into the user's global config.
+    pub async fn patch_global(&self, patch: Value) -> Result<()> {
+        let res = self.http.patch(self.url("/global/config")).json(&patch).send().await?;
+        res.error_for_status()?;
+        Ok(())
+    }
     pub async fn abort(&self, id: &str) -> Result<()> {
         self.post(&format!("/session/{id}/abort"), json!({})).await.map(|_| ())
     }

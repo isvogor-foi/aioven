@@ -764,3 +764,43 @@ GET /experimental/aioven/usage?from=YYYY-MM-DD → { days: Day[], first: "YYYY-M
   - The CLI default command and `attach` start the Ratatui client (`cli/cmd/rust-tui.ts`); `--mini` and `run` stay on run mode.
   - Deleted: 138 unreachable `packages/tui` files (found by an import-graph walk from the remaining users), `cli/tui/*`, `plugin/tui/*`, and the tests that only covered them.
   - Kept: the library run mode needs (brand, config, keymap, theme, prompt, util, editor, parsers-config).
+
+---
+
+# T23–T26 — design (confirmed 2026-10-09)
+
+Settings are saved through **`PATCH /global/config`**, a deep merge into `~/.config/opencode/opencode.json`, which the server validates.
+- They are user preferences, so global is the right scope.
+- Unknown keys are ignored by stock OpenCode (`onExcessProperty: "ignore"`), so this is safe for a normal OpenCode install.
+- Project `PATCH /config` is not used: it writes `<project>/config.json`, which the project loader never reads.
+
+| # | Todo | Components |
+|---|---|---|
+| T23 | Session list | `api.rs` `sessions(search)`, `app.rs` `switch_session()`, `ui/popups.rs` sessions popup, `menu.rs` |
+| T24 | Terse level switch | `api.rs` `patch_global(json)`, `menu.rs` items, `app.rs` |
+| T25 | Agent tiers editor | `menu.rs` tier items, `app.rs` tier picking (reuses the model list), `api.rs` `patch_global` |
+| T26 | OAuth live check | run the Copilot browser login up to the device-code screen in an isolated data dir |
+
+```rust
+// T23
+Api::sessions(search: &str) -> Vec<Session>       // GET /session?roots=true&search=&limit=50, newest first
+App::switch_session(s: Session)                    // reset store/tabs/scroll, root = viewing = s, reload history, children, recipe
+Popup::Sessions { query, sel }                     // Ctrl+P → "Sessions…" (and /sessions). Rows: title · relative time · tokens.
+                                                   // Enter opens; "+ New session" is the first row.
+
+// T24
+Api::patch_global(patch: Value)                    // PATCH /global/config
+menu Item::Terse(level)                            // "Caveman: off | lite | full | ultra  ✓"
+// → patch {aioven:{terse:level}}, then reload /config. It takes effect on the next request (the system part is read per request).
+
+// T25
+menu Item::TierModel { tier, provider, model }     // "Tier small: <model>  ✓", one item per (tier × connected model)
+// → patch {aioven:{tiers:{<tier>: "provider/model"}}}. The server rebuilds agents on config change, so subagents
+// pick up the new tier models.
+```
+
+## T23–T26 status (2026-10-09)
+- **T23 sessions:** verified live. Ctrl+P → Sessions… or `/sessions`; filtering works; opening a past session switches tabs, chat and blueprint in place; "+ New session" is the first row.
+- **T24 caveman level:** verified live. It is saved to the global config (`aioven.terse`), and the menu shows ✓ on the current level.
+- **T25 tiers:** verified live. "Tier small: Fake" saved `aioven.tiers.small = fake/fake`, and the `pantry` agent then resolved to that model.
+- **T26 OAuth:** verified live up to the device-code screen (github.com/login/device + code, then "waiting for the browser login"), then cancelled. No login was made.

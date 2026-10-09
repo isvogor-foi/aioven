@@ -24,8 +24,9 @@ Options: `aioven [dir] [-s <id> | -c] [--model provider/model] [--agent bake|rec
 | Ctrl+0–9 (or Alt+0–9) | open tab N; never types into the input |
 | `/` or `\` at line start | skills (✦) and commands; ↑↓ choose, Tab complete, Enter run, Esc close |
 | `/connect` | log in to a model provider (API key or browser login) |
+| `/sessions` | open a past session or start a new one (also in Ctrl+P) |
 | Ctrl+U | usage page: heat map of tokens per day for a year (←/→), monthly bars, totals since install |
-| Ctrl+P | menu: connect provider, usage stats, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
+| Ctrl+P | menu: sessions, connect provider, usage stats, caveman level, model per tier, model for next prompts, bake/recipe, transcript detail, blueprint, background, stop all, quit (type to filter) |
 | Ctrl+B | move running foreground subagents to the background (inside tmux press Ctrl+B twice, or use the Ctrl+P menu) |
 | Ctrl+↑ | focus chat, then blueprint (↑↓ / j k / PgUp PgDn / g G scroll; Esc or i back to typing) |
 | Mouse wheel | scroll chat or blueprint under the pointer |

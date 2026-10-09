@@ -43,6 +43,9 @@ pub enum NetMsg {
     ConnectStep(Step),
     Connected(String),
     Usage(crate::usage::Usage),
+    Sessions(Vec<Session>),
+    Config(serde_json::Value),
+    SwitchTo(Session),
     Error(String),
 }
 
@@ -66,6 +69,9 @@ pub struct App {
     pub now: i64,
     pub focus: Focus,
     pub menu_open: bool,
+    /// T23 sessions popup: (query, selection); list loaded once per open
+    pub sessions_popup: Option<(String, usize)>,
+    pub session_list: Vec<Session>,
     pub usage: Option<crate::usage::Usage>,
     pub usage_year: i64,
     pub connect: Option<Step>,
@@ -118,6 +124,8 @@ impl App {
             now: now_ms(),
             focus: Focus::Input,
             menu_open: false,
+            sessions_popup: None,
+            session_list: Vec::new(),
             usage: None,
             usage_year: 0,
             connect: None,
@@ -162,7 +170,9 @@ impl App {
         } else {
             Modal::None
         };
-        let popup = if self.connect.is_some() {
+        let popup = if self.sessions_popup.is_some() {
+            Popup::Sessions
+        } else if self.connect.is_some() {
             Popup::Connect
         } else if self.menu_open {
             Popup::Menu
@@ -191,12 +201,81 @@ impl App {
     }
 
     pub fn menu_items(&self) -> Vec<(String, Item)> {
+        let aioven = self.store.config.get("aioven");
+        let terse = aioven.and_then(|a| a.get("terse")).and_then(|v| v.as_str()).unwrap_or("ultra").to_string();
+        let tiers: Vec<(String, String)> = aioven
+            .and_then(|a| a.get("tiers"))
+            .and_then(|t| t.as_object())
+            .map(|o| o.iter().filter_map(|(k, v)| v.as_str().map(|m| (k.clone(), m.to_string()))).collect())
+            .unwrap_or_default();
         menu::items(&menu::Context {
             agent: &self.agent,
             compact: self.compact,
             models: &self.models,
             current_model: self.model.as_ref(),
+            terse: &terse,
+            tiers: &tiers,
         })
+    }
+
+    /// T23: sessions matching the popup query (title or id), newest first.
+    pub fn sessions_visible(&self) -> Vec<&Session> {
+        let q = self.sessions_popup.as_ref().map(|(q, _)| q.to_lowercase()).unwrap_or_default();
+        self.session_list.iter().filter(|s| q.is_empty() || s.title.to_lowercase().contains(&q) || s.id.contains(&q)).take(200).collect()
+    }
+
+    pub fn open_sessions(&mut self) {
+        self.menu_open = false;
+        self.sessions_popup = Some((String::new(), 0));
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            let _ = tx.send(match api.sessions().await {
+                Ok(list) => NetMsg::Sessions(list),
+                Err(e) => NetMsg::Error(format!("sessions: {e:#}")),
+            });
+        });
+    }
+
+    /// T23: make `s` the root session (row 0 of the popup = new session).
+    pub fn switch_session(&mut self, s: Session) {
+        let config = std::mem::take(&mut self.store.config);
+        let agents = std::mem::take(&mut self.store.agents);
+        let skills = std::mem::take(&mut self.store.skills);
+        self.store = Store::default();
+        self.store.config = config;
+        self.store.agents = agents;
+        self.store.skills = skills;
+        self.root = s.id.clone();
+        self.viewing = s.id.clone();
+        self.store.sessions.insert(s.id.clone(), s);
+        self.view = View::Chat;
+        self.chat_scroll = 0;
+        self.files_scroll = 0;
+        self.recipe = None;
+        self.out_chars.clear();
+        self.loaded.clear();
+        let root = self.root.clone();
+        self.ensure_loaded(&root);
+        self.load_children();
+        self.refresh_recipe();
+        self.load_pending();
+    }
+
+    fn save_global(&mut self, patch: serde_json::Value, done: String) {
+        let (api, tx) = (self.api.clone(), self.tx.clone());
+        tokio::spawn(async move {
+            match api.patch_global(patch).await {
+                Ok(()) => {
+                    let _ = tx.send(NetMsg::Notice(done));
+                    if let Ok(cfg) = api.config().await {
+                        let _ = tx.send(NetMsg::Config(cfg));
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(NetMsg::Error(format!("saving settings: {e:#}")));
+                }
+            }
+        });
     }
 
     pub fn menu_visible(&self) -> Vec<(String, Item)> {
@@ -357,6 +436,14 @@ impl App {
             Item::Background => self.update(Action::Background),
             Item::Connect => self.open_connect(),
             Item::Usage => self.update(Action::Usage),
+            Item::Sessions => self.open_sessions(),
+            Item::Terse(level) => {
+                self.save_global(serde_json::json!({ "aioven": { "terse": level } }), format!("caveman level: {level} (next prompt)"))
+            }
+            Item::TierModel { tier, provider, model } => self.save_global(
+                serde_json::json!({ "aioven": { "tiers": { tier.clone(): format!("{provider}/{model}") } } }),
+                format!("tier {tier} → {model}"),
+            ),
             Item::Quit => self.quit = true,
         }
     }
@@ -460,6 +547,7 @@ impl App {
             NetMsg::Commands(mut c) => {
                 // client-side command: provider login
                 c.push(Entry { name: "connect".into(), description: "log in to a model provider".into(), skill: false });
+                c.push(Entry { name: "sessions".into(), description: "open a past session".into(), skill: false });
                 self.commands = c;
             }
             NetMsg::Models(m) => self.models = m,
@@ -473,6 +561,9 @@ impl App {
                     self.connect = Some(step);
                 }
             }
+            NetMsg::Sessions(list) => self.session_list = list,
+            NetMsg::Config(cfg) => self.store.config = cfg,
+            NetMsg::SwitchTo(s) => self.switch_session(s),
             NetMsg::Usage(u) => {
                 if self.usage_year == 0 {
                     self.usage_year = u.days.last().and_then(|d| crate::usage::parse(&d.day)).map(|(y, _, _)| y).unwrap_or(1970);
@@ -556,6 +647,10 @@ impl App {
                 let text = self.input_text();
                 if text.trim().is_empty() {
                     return;
+                }
+                if text.trim() == "/sessions" || text.trim() == "\\sessions" {
+                    self.reset_input();
+                    return self.open_sessions();
                 }
                 if text.trim() == "/connect" || text.trim() == "\\connect" {
                     self.reset_input();
@@ -687,6 +782,43 @@ impl App {
             Action::Scroll(Pane::Files, d) => self.files_scroll = (self.files_scroll as i32 + d as i32).clamp(0, 10_000) as u16,
             Action::ScrollEdge(Pane::Chat, top) => self.chat_scroll = if top { 10_000 } else { 0 },
             Action::ScrollEdge(Pane::Files, top) => self.files_scroll = if top { 0 } else { 10_000 },
+            Action::PopupMove(d) if self.sessions_popup.is_some() => {
+                let n = self.sessions_visible().len() as i64 + 1; // row 0 = new session
+                if let Some((_, sel)) = self.sessions_popup.as_mut() {
+                    *sel = (*sel as i64 + d as i64).rem_euclid(n) as usize;
+                }
+            }
+            Action::PopupAccept if self.sessions_popup.is_some() => {
+                let sel = self.sessions_popup.as_ref().map(|(_, s)| *s).unwrap_or(0);
+                let picked = if sel == 0 { None } else { self.sessions_visible().get(sel - 1).map(|s| (*s).clone()) };
+                self.sessions_popup = None;
+                match picked {
+                    Some(s) => self.switch_session(s),
+                    None => {
+                        let (api, tx) = (self.api.clone(), self.tx.clone());
+                        tokio::spawn(async move {
+                            let _ = tx.send(match api.session_create().await {
+                                Ok(s) => NetMsg::SwitchTo(s),
+                                Err(e) => NetMsg::Error(format!("{e:#}")),
+                            });
+                        });
+                    }
+                }
+            }
+            Action::PopupClose if self.sessions_popup.is_some() => self.sessions_popup = None,
+            Action::MenuInput(key) if self.sessions_popup.is_some() => {
+                use crossterm::event::KeyCode;
+                if let Some((q, sel)) = self.sessions_popup.as_mut() {
+                    match key.code {
+                        KeyCode::Char(c) => q.push(c),
+                        KeyCode::Backspace => {
+                            q.pop();
+                        }
+                        _ => {}
+                    }
+                    *sel = 0;
+                }
+            }
             Action::PopupMove(d) if self.connect.is_some() => self.connect_input(connect::Input::Move(d)),
             Action::PopupAccept if self.connect.is_some() => self.connect_input(connect::Input::Enter),
             Action::PopupClose if self.connect.is_some() => self.connect = None,
@@ -719,6 +851,10 @@ impl App {
                     if name == "connect" {
                         self.reset_input();
                         return self.open_connect();
+                    }
+                    if name == "sessions" {
+                        self.reset_input();
+                        return self.open_sessions();
                     }
                     let args = complete::split(&self.input_text()).map(|(_, a)| a.to_string()).unwrap_or_default();
                     self.run_command(name, args);
